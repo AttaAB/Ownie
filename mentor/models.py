@@ -44,6 +44,10 @@ class DecisionSet(BaseModel):
   decisions: list[Decision] = Field(description="ranked, most important first")
 
 
+class Ranking(BaseModel):
+  order: list[int] = Field(description="decision numbers, most important first")
+
+
 class Grade(BaseModel):
   verdict: Verdict
   feedback: str = Field(
