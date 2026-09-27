@@ -88,8 +88,12 @@ def _normalise(lines):
   return "\n".join(" ".join(line.split()) for line in lines if line.strip())
 
 
-def owned_titles(state):
-  return [entry["decision"]["title"] for entry in state["decisions"].values() if entry["status"] == "owned"]
+def known_decisions(state):
+  """(id, title, status) for everything already found here, so a new review reuses ids."""
+  known = [(e["decision"]["id"], e["decision"]["title"], e["status"]) for e in state["decisions"].values()]
+  reviewed = state["decisions"].keys()
+  known += [(d["id"], d["title"], "not asked yet") for d in state.get("pending", []) if d["id"] not in reviewed]
+  return known
 
 
 def ownership(state):

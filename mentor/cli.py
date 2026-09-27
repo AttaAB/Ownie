@@ -7,7 +7,7 @@ from mentor import git as g
 from mentor import ui
 from mentor.llm import MissingAPIKey, ensure_api_key
 from mentor.pipeline import analyze
-from mentor.record import (DECISIONS_FILE, load_state, mark_changed, owned_titles, ownership, pending_decisions,
+from mentor.record import (DECISIONS_FILE, known_decisions, load_state, mark_changed, ownership, pending_decisions,
                            revisit_decisions, save_state)
 from mentor.scope import EMPTY_TREE, _diff_scope, resolve_scope
 from mentor.session import QuitSession, read_input, run_session
@@ -139,8 +139,9 @@ def review_scope(args):
             + "; ".join(changed))
 
   with ui.working(f"Reading {scope.label} and finding design decisions…"):
-    analysis = analyze(scope, owned_titles=owned_titles(state))
-  decisions = analysis.decisions
+    analysis = analyze(scope, known=known_decisions(state))
+  # the prompt asks for this; enforce it, since an owned decision re-asked is noise
+  decisions = [d for d in analysis.decisions if state["decisions"].get(d.id, {}).get("status") != "owned"]
 
   ui.step(args.verbose, "context", f"{analysis.context_source} · {len(analysis.context_text):,} chars")
   if analysis.truncated:
@@ -151,15 +152,18 @@ def review_scope(args):
 
   state["last_reviewed_commit"] = g.head_commit()
 
+  # keep leftovers from earlier reviews that this one didn't return again (same id = same decision)
+  new_ids = {d.id for d in decisions}
+  leftovers = [d for d in pending_decisions(state) if d.id not in new_ids]
+
   if not decisions:
-    state["pending"] = []
     save_state(state)
-    ui.info("No design decisions worth asking about in this change.")
+    ui.info("No new design decisions worth asking about in this change.")
     return
 
   asked = decisions[:args.n]
   ui.found(len(decisions), len(asked), scope.label)
-  finish(state, asked, decisions[args.n:], scope.label)
+  finish(state, asked, decisions[args.n:] + leftovers, scope.label)
 
 
 def review_pending(args):

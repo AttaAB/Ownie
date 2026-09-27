@@ -21,9 +21,10 @@ class Analysis:
   context_source: str             # "diff only" / "whole files"
 
 
-def analyze(scope, owned_titles=()):
+def analyze(scope, known=()):
+  """`known`: (id, title, status) of decisions from earlier reviews, so ids are reused."""
   context = build_context(scope)
-  found = extract_decisions(context.text, scope.label, owned_titles=owned_titles)
+  found = extract_decisions(context.text, scope.label, known=known)
   decisions, dropped = filter_decisions(found, context.visible_lines)
 
   return Analysis(

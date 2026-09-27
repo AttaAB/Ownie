@@ -112,7 +112,7 @@ Rules for questions:
 - The hint nudges toward where to look or what to consider, without
   giving the answer.
 
-{already_owned}
+{known}
 Return up to {max_decisions} decisions, ranked. Only the top few are asked
 immediately and the rest are kept for later, so be thorough rather than
 terse — but every decision must be real and consequential. Return an
@@ -172,18 +172,19 @@ Feedback rules:
 """
 
 
-def extract_decisions(context, scope_label, max_decisions=MAX_DECISIONS, owned_titles=()):
-  already_owned = ""
-  if owned_titles:
-    listed = "\n".join(f"- {t}" for t in owned_titles)
-    already_owned = (
-      "The developer has already demonstrated ownership of these decisions; "
-      "do not return them again unless the code for them has changed:\n"
+def extract_decisions(context, scope_label, max_decisions=MAX_DECISIONS, known=()):
+  known_text = ""
+  if known:
+    listed = "\n".join(f"- {id_} — {title} ({status})" for id_, title, status in known)
+    known_text = (
+      "Decisions already found in this repo in earlier reviews (id — title (status)):\n"
       f"{listed}\n"
+      "Do not return an \"owned\" one again unless the code for it has changed. If you "
+      "return any other decision from this list, reuse its exact id so it isn't duplicated.\n"
     )
 
   prompt = EXTRACT_PROMPT.format(
-    already_owned=already_owned,
+    known=known_text,
     max_decisions=max_decisions,
     scope_label=scope_label,
     context=context,
