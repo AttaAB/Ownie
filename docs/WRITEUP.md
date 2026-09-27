@@ -69,6 +69,7 @@ prompts.
 | Rank by centrality instead of "security first" | top-3 must-know 72% → 92% |
 | Severe security risks first (product choice) | trial app: no-auth #1; whole-project top-3 92% → 81% |
 | Grader sees the cited code | fixes a real-use false "missing"; 0 false "owned" kept |
+| One scenario per question, asking one thing | top-3 must-know 81% → 89%, grader agreement 74% → 78%, questions 36 → 30 words |
 
 Some findings mattered more than the numbers:
 
@@ -91,20 +92,22 @@ Some findings mattered more than the numbers:
   answers all stayed within the answer key, so it couldn't catch this.
   Giving the grader the cited code fixed it.
 - **Some of Must@3 is taste.** A human and a model can reasonably
-  disagree about which decision matters most. The 81% whole-project
-  figure includes a deliberate trade: severe security issues always come
-  first, even where the labeller had rated them secondary.
+  disagree about which decision matters most. The whole-project figure
+  includes a deliberate trade: severe security issues always come first,
+  even where the labeller had rated them secondary.
 
 ## Current results
 
 | Suite | Must@3 | Must(any) | Recall | Precision |
 |---|---|---|---|---|
-| Whole project (32 labels) | 81% | 88% | 80% | 100% |
-| One change, diff only (19 labels) | 63% | 94% | 94% | 100% |
+| Whole project (32 labels) | 89% | 92% | 79% | 100% |
+| One change, diff only (19 labels) | 62% | 96% | 94% | 100% |
 
-The grader agrees with labelled sample answers 71–74% of the time. It
-errs toward "partial" for good answers, and graded **0 of 258** wrong or
-surface-level answers as owned.
+The grader agrees with labelled sample answers 78% of the time. It errs
+toward "partial" for good answers. Of 258 wrong or surface-level sample
+answers, it graded 1 as owned: a borderline answer that is only wrong
+outside the question's scenario, and graded partial or missing in 9 of 9
+re-grades.
 
 ## Limits
 
@@ -114,12 +117,12 @@ surface-level answers as owned.
 - **Small projects:** each fits in one context window. Very large
   changes are truncated, with a warning.
 - **The grader is conservative.** Good answers are often graded
-  "partial", especially when a question bundles two scenarios.
+  "partial". Narrower questions helped, but a quarter to a half still
+  have a second part.
 - **Privacy:** code is sent to the OpenAI API.
 
 ## What I'd do next
 
 Try it on more real repositories and people, which is where the most
-useful finding so far came from. Then: shorter single-scenario
-questions, and a larger, multi-labeller benchmark before tuning ranking
-any further.
+useful finding so far came from. Then a larger, multi-labeller benchmark
+before tuning ranking or questions any further.

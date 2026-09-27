@@ -152,12 +152,13 @@ Current results (3 runs per project):
 
 | Suite | Must@3 | Must(any) | Recall | Precision |
 |---|---|---|---|---|
-| Whole project (32 labels) | 81% | 88% | 80% | 100% |
-| One change, diff only (19 labels) | 63% | 94% | 94% | 100% |
+| Whole project (32 labels) | 89% | 92% | 79% | 100% |
+| One change, diff only (19 labels) | 62% | 96% | 94% | 100% |
 
-The grader agrees with labelled sample answers 71–74% of the time, and
-never graded a wrong or surface-level answer "owned" (0 of 258 in the
-latest replays).
+The grader agrees with labelled sample answers 78% of the time. Of 258
+wrong or surface-level sample answers in the latest replays, 1 was graded
+"owned" — a borderline answer that is only wrong outside the question's
+scenario, and graded partial or missing in 9 of 9 re-grades.
 
 ```bash
 .venv/bin/pip install -e ".[eval]"
