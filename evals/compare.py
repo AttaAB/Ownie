@@ -53,7 +53,9 @@ def resolve(name):
   path = Path(name)
   if path.exists():
     return path
-  candidates = sorted(RESULTS_DIR.glob(f"*-{name}.jsonl"))
+  # files are "<YYYY-MM-DD-HHMM>-<config>.jsonl"; match the config exactly, so
+  # "ranking-v6" doesn't also pick up "change-ranking-v6"
+  candidates = sorted(p for p in RESULTS_DIR.glob(f"*-{name}.jsonl") if p.stem[16:] == name)
   if not candidates:
     raise SystemExit(f"No results found for {name!r} in {RESULTS_DIR}")
   return candidates[-1]
