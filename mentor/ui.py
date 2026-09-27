@@ -171,12 +171,12 @@ def explanation(decision):
 
 def stopped():
   console.print()
-  note("Stopping here. Progress saved; run `mentor review --more` to continue.")
+  note("Stopping here. Progress saved.")
 
 
 # ── end of session ────────────────────────────────────────────────────────
 
-def end_card(tally, ownership_before, ownership_after, left, record_path):
+def end_card(tally, ownership_before, ownership_after, left, to_revisit, record_path):
   counts = Table.grid(padding=(0, 3))
   cells = [
     Text.assemble((str(tally["owned"]), "bold green"), " owned"),
@@ -202,6 +202,8 @@ def end_card(tally, ownership_before, ownership_after, left, record_path):
   lines = [counts, Text(""), meter, Text("")]
   if left:
     lines.append(Text.assemble(("Next  ", "bold"), (f"mentor review --more", "cyan"), (f"  ({left} decision{'s' if left != 1 else ''} left)", "dim")))
+  if to_revisit:
+    lines.append(Text.assemble(("Retry  ", "bold"), ("mentor review --revisit", "cyan"), (f"  ({to_revisit} not owned yet)", "dim")))
   lines.append(Text.assemble(("Record  ", "bold"), (str(record_path), "dim")))
 
   console.print()

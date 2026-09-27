@@ -28,6 +28,7 @@ mentor review --since <ref>    # from a commit, or a date like "3 days ago"
 mentor review --base develop   # on a branch, compare against develop
 mentor review --all            # the whole repo
 mentor review --more           # continue with leftover decisions
+mentor review --revisit        # retry decisions you haven't owned yet
 mentor review -v               # show each pipeline step
 ```
 

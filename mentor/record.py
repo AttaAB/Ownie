@@ -64,6 +64,14 @@ def pending_decisions(state):
   return [Decision(**d) for d in state.get("pending", [])]
 
 
+def revisit_decisions(state):
+  """Reviewed but not owned yet, weakest first ("to revisit" before "partial")."""
+  order = {"revisit": 0, "partial": 1}
+  entries = [e for e in state["decisions"].values() if e["status"] in order]
+  entries.sort(key=lambda e: order[e["status"]])
+  return [Decision(**e["decision"]) for e in entries]
+
+
 def render_decisions(state):
   entries = list(state["decisions"].values())
   counts = {status: sum(1 for e in entries if e["status"] == status) for status in STATUS_LABELS}

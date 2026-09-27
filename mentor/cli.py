@@ -7,7 +7,8 @@ from mentor import git as g
 from mentor import ui
 from mentor.llm import MissingAPIKey, ensure_api_key
 from mentor.pipeline import analyze
-from mentor.record import DECISIONS_FILE, load_state, owned_titles, ownership, pending_decisions, save_state
+from mentor.record import (DECISIONS_FILE, load_state, owned_titles, ownership, pending_decisions,
+                           revisit_decisions, save_state)
 from mentor.scope import resolve_scope
 from mentor.session import QuitSession, read_input, run_session
 
@@ -37,6 +38,7 @@ What to review (pick at most one; default is "recent changes"):
   --base BRANCH        on a branch, compare against BRANCH instead of main
   --all                the whole repo
   --more               continue with decisions left from the last review
+  --revisit            retry decisions you haven't owned yet (explained or partial)
 
 How to review:
   -n NUMBER            questions to ask (default {QUESTIONS_PER_RUN})
@@ -52,6 +54,7 @@ Examples:
   mentor review --uncommitted       check what Claude just wrote
   mentor review --since "2 days ago" -n 5
   mentor review --all -v
+  mentor review --revisit           retry what you didn't own last time
 """
 
 
@@ -79,6 +82,7 @@ def main(argv=None):
   review.add_argument("--since", metavar="REF", help="changes since a commit or date ('3 days ago')")
   review.add_argument("--base", metavar="BRANCH", help="on a branch, compare against BRANCH instead of main")
   review.add_argument("--more", action="store_true", help="continue with decisions left over from the last review")
+  review.add_argument("--revisit", action="store_true", help="retry decisions not owned yet")
   review.add_argument("-n", type=int, default=QUESTIONS_PER_RUN, help=f"questions to ask (default {QUESTIONS_PER_RUN})")
   review.add_argument("-v", "--verbose", action="store_true", help="show each pipeline step")
 
@@ -86,6 +90,8 @@ def main(argv=None):
   if args.help:
     print(OVERVIEW)
     return
+  if args.more and args.revisit:
+    parser.error("use either --more or --revisit, not both")
 
   try:
     os.chdir(g.repo_root())
@@ -96,6 +102,8 @@ def main(argv=None):
     ensure_api_key()
     if args.more:
       review_pending(args)
+    elif args.revisit:
+      review_revisit(args)
     else:
       review_scope(args)
   except (g.GitError, MissingAPIKey) as error:
@@ -153,6 +161,27 @@ def review_pending(args):
   finish(state, pending[:args.n], pending[args.n:], "continued review")
 
 
+def review_revisit(args):
+  state = load_state()
+  decisions = revisit_decisions(state)
+  if not decisions:
+    ui.info("Nothing to revisit — every decision you've answered is owned.")
+    return
+
+  ui.info(f"{len(decisions)} decision(s) you haven't owned yet.")
+  asked = decisions[:args.n]
+  previous = {d.id: state["decisions"][d.id] for d in asked}
+  before = ownership(state)
+
+  tally, requeue = run_session(asked, state, "revisit")
+  # skipped or unreached: keep their old status so they stay in the revisit list
+  for d in requeue:
+    state["decisions"][d.id] = previous[d.id]
+  save_state(state)
+
+  _end_card(state, tally, before)
+
+
 def finish(state, asked, remaining, scope_label):
   state["pending"] = [d.model_dump() for d in asked + remaining]
   before = ownership(state)
@@ -162,7 +191,11 @@ def finish(state, asked, remaining, scope_label):
   state["pending"] = [d.model_dump() for d in remaining + requeue]
   save_state(state)
 
-  ui.end_card(tally, before, ownership(state), len(state["pending"]), DECISIONS_FILE)
+  _end_card(state, tally, before)
+
+
+def _end_card(state, tally, before):
+  ui.end_card(tally, before, ownership(state), len(state["pending"]), len(revisit_decisions(state)), DECISIONS_FILE)
 
 
 def ask_choice(prompt, options):
