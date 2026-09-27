@@ -72,7 +72,10 @@ Your job:
    later. Rank first the decisions central to what the code is for — the
    ones a reviewer would expect its author to explain — not by category:
    a peripheral security or performance detail ranks below a core
-   behaviour the code exists to provide.
+   behaviour the code exists to provide. The exception is a severe,
+   easily exploited risk — anyone can read or change other users' data
+   without authenticating, run code on the server, or inject queries or
+   commands: rank those at the very top.
 
 What counts as a decision — include BOTH kinds:
 - Risks and trade-offs: choices with a downside someone could be asked to
