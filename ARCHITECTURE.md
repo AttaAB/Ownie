@@ -24,7 +24,7 @@ mentor review
 
 | File | Job |
 |---|---|
-| `cli.py` | The `mentor` command: parses flags, runs the steps above in order. |
+| `cli.py` | The `mentor` command: parses flags, runs the steps above in order; `mentor status` summarises ownership and what's waiting without calling the model. |
 | `scope.py` | Decides which code to review: branch vs main, since last review, `--since`, `--uncommitted`, `--all`; applies `.mentorignore`. |
 | `git.py` | Thin wrapper around the `git` command line. |
 | `pipeline.py` | `analyze(scope)`: the non-interactive core. **The CLI and the evals both call this**, so what we measure is what users get. |

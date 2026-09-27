@@ -9,7 +9,7 @@ from mentor.llm import MissingAPIKey, ensure_api_key
 from mentor.pipeline import analyze
 from mentor.record import (DECISIONS_FILE, load_state, mark_changed, owned_titles, ownership, pending_decisions,
                            revisit_decisions, save_state)
-from mentor.scope import resolve_scope
+from mentor.scope import EMPTY_TREE, _diff_scope, resolve_scope
 from mentor.session import QuitSession, read_input, run_session
 
 QUESTIONS_PER_RUN = 3
@@ -29,6 +29,7 @@ grades your answers, and records what you understand in
 
 Usage:
   mentor review [options]
+  mentor status              where this repo stands (no questions, no API calls)
 
 What to review (pick at most one; default is "recent changes"):
   (no option)          on a branch: changes since it split from main
@@ -86,17 +87,23 @@ def main(argv=None):
   review.add_argument("-n", type=int, default=QUESTIONS_PER_RUN, help=f"questions to ask (default {QUESTIONS_PER_RUN})")
   review.add_argument("-v", "--verbose", action="store_true", help="show each pipeline step")
 
+  status = sub.add_parser("status", add_help=False, allow_abbrev=False)
+  status.add_argument("-h", "--help", action="store_true")
+
   args = parser.parse_args(argv)
   if args.help:
     print(OVERVIEW)
     return
-  if args.more and args.revisit:
-    parser.error("use either --more or --revisit, not both")
 
   try:
     os.chdir(g.repo_root())
   except g.GitError:
     sys.exit("mentor: not inside a git repository.")
+
+  if args.command == "status":
+    return show_status()
+  if args.more and args.revisit:
+    parser.error("use either --more or --revisit, not both")
 
   try:
     ensure_api_key()
@@ -164,6 +171,39 @@ def review_pending(args):
 
   ui.info(f"{len(pending)} decision(s) left from the last review.")
   finish(state, pending[:args.n], pending[args.n:], "continued review")
+
+
+def show_status():
+  state = load_state()
+  if not state["decisions"] and not state["pending"]:
+    ui.info("No reviews yet in this repo. Run `mentor review` to start.")
+    return
+
+  changed = mark_changed(state)
+  if changed:
+    save_state(state)
+
+  counts = {}
+  for entry in state["decisions"].values():
+    counts[entry["status"]] = counts.get(entry["status"], 0) + 1
+
+  last = state.get("last_reviewed_commit")
+  new_commits = None
+  if last and g.ref_exists(last) and g.is_ancestor(last):
+    new_commits = int(g.git("rev-list", "--count", f"{last}..HEAD").strip())
+
+  ui.status_card(
+    ownership=ownership(state),
+    counts=counts,
+    pending=len(state["pending"]),
+    to_revisit=len(revisit_decisions(state)),
+    changed=[e["decision"]["title"] for e in state["decisions"].values() if e["status"] == "changed"],
+    last_reviewed=g.short(last) if last else None,
+    new_commits=new_commits,
+    # via the review scope, so mentor's own .mentor/ files and lockfiles don't count
+    uncommitted=not _diff_scope(g.head_commit() or EMPTY_TREE, "uncommitted").is_empty,
+    record_path=DECISIONS_FILE,
+  )
 
 
 def review_revisit(args):

@@ -210,5 +210,59 @@ def end_card(tally, ownership_before, ownership_after, left, to_revisit, record_
   console.print(Panel(Group(*lines), title=" Session complete ", title_align="left", border_style="green", padding=(1, 2), width=_width()))
 
 
+def status_card(ownership, counts, pending, to_revisit, changed, last_reviewed, new_commits, uncommitted,
+                record_path):
+  owned, total = ownership
+  meter = Table.grid(padding=(0, 2))
+  meter.add_row(
+    Text("Repo ownership", style="bold"),
+    ProgressBar(total=100, completed=_pct(owned, total), width=24, complete_style="green", finished_style="green"),
+    Text(f"{_pct(owned, total)}%  ({owned}/{total} decisions)", style="dim"),
+  )
+
+  styles = {"owned": "bold green", "partial": "bold yellow", "revisit": "bold red", "changed": "bold magenta"}
+  names = {"owned": "owned", "partial": "partial", "revisit": "to revisit", "skipped": "skipped", "changed": "code changed"}
+  cells = [Text.assemble((str(n), styles.get(status, "bold")), f" {names[status]}")
+           for status, n in counts.items() if n]
+  if pending:
+    cells.append(Text.assemble((str(pending), "bold"), " not asked yet"))
+  row = Table.grid(padding=(0, 3))
+  row.add_row(*cells)
+
+  lines = [meter, Text(""), row, Text("")]
+  for title in changed:
+    lines.append(Text.assemble(("↻ ", "magenta"), (title, "dim"), ("  code changed since you owned it", "magenta")))
+  if changed:
+    lines.append(Text(""))
+
+  if last_reviewed is None:
+    since = "not reviewed yet"
+  elif new_commits is None:
+    since = f"last review at {last_reviewed} (no longer in this branch's history)"
+  else:
+    since = f"{new_commits} new commit{'s' if new_commits != 1 else ''} since the last review ({last_reviewed})"
+  if uncommitted:
+    since += " + uncommitted changes"
+  lines.append(Text.assemble(("Changes  ", "bold"), (since, "dim")))
+
+  # one suggestion: new code first, then leftovers, then retries
+  if new_commits or uncommitted or changed:
+    nxt = ("mentor review", "review what's new")
+  elif pending:
+    nxt = ("mentor review --more", f"{pending} decision{'s' if pending != 1 else ''} not asked yet")
+  elif to_revisit:
+    nxt = ("mentor review --revisit", f"{to_revisit} not owned yet")
+  else:
+    nxt = None
+  if nxt:
+    lines.append(Text.assemble(("Next     ", "bold"), (nxt[0], "cyan"), (f"  ({nxt[1]})", "dim")))
+  else:
+    lines.append(Text.assemble(("Next     ", "bold"), ("nothing to do — everything here is owned", "green")))
+  lines.append(Text.assemble(("Record   ", "bold"), (str(record_path), "dim")))
+
+  console.print(Panel(Group(*lines), title=" mentor status ", title_align="left", border_style="cyan",
+                      padding=(1, 2), width=_width()))
+
+
 def _pct(owned, total):
   return round(100 * owned / total) if total else 0

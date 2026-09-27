@@ -29,6 +29,7 @@ mentor review --base develop   # on a branch, compare against develop
 mentor review --all            # the whole repo
 mentor review --more           # continue with leftover decisions
 mentor review --revisit        # retry decisions you haven't owned yet
+mentor status                  # ownership score and what's waiting (no API calls)
 mentor review -v               # show each pipeline step
 ```
 
