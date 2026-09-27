@@ -1,0 +1,23 @@
+{"change": "link-shortener/custom-alias-expiry", "id": "alias-check-then-insert", "priority": "must-find", "note": ""}
+{"change": "link-shortener/custom-alias-expiry", "id": "migration-at-import", "priority": "nice-to-find", "note": ""}
+{"change": "link-shortener/custom-alias-expiry", "id": "naive-expiry-as-utc", "priority": "must-find", "note": ""}
+{"change": "link-shortener/custom-alias-expiry", "id": "reserved-alias-list", "priority": "must-find", "note": ""}
+{"change": "link-shortener/custom-alias-expiry", "id": "expiry-checked-on-redirect", "priority": "nice-to-find", "note": ""}
+{"change": "link-shortener/custom-alias-expiry", "id": null, "missing": ""}
+{"change": "notes-app/image-attachments", "id": "shared-images-gated-by-token", "priority": "must-find", "note": ""}
+{"change": "notes-app/image-attachments", "id": "images-skip-updated-at", "priority": "must-find", "note": ""}
+{"change": "notes-app/image-attachments", "id": "images-as-sqlite-blobs", "priority": "nice-to-find", "note": ""}
+{"change": "notes-app/image-attachments", "id": "global-body-size-limit", "priority": "nice-to-find", "note": ""}
+{"change": "notes-app/image-attachments", "id": "upload-content-sniffing", "priority": "nice-to-find", "note": ""}
+{"change": "notes-app/image-attachments", "id": null, "missing": ""}
+{"change": "sync-cli/multi-folder-sync", "id": "thread-per-folder-isolation", "priority": "must-find", "note": ""}
+{"change": "sync-cli/multi-folder-sync", "id": "all-or-nothing-locking", "priority": "must-find", "note": ""}
+{"change": "sync-cli/multi-folder-sync", "id": "graceful-stop-between-files", "priority": "nice-to-find", "note": ""}
+{"change": "sync-cli/multi-folder-sync", "id": "dest-relative-to-config", "priority": "nice-to-find", "note": ""}
+{"change": "sync-cli/multi-folder-sync", "id": "dest-overlap-check", "priority": "must-find", "note": ""}
+{"change": "sync-cli/multi-folder-sync", "id": null, "missing": ""}
+{"change": "webhook-api/refunds", "id": "refund-total-only-increases", "priority": "must-find", "note": ""}
+{"change": "webhook-api/refunds", "id": "refund-as-running-total", "priority": "must-find", "note": ""}
+{"change": "webhook-api/refunds", "id": "refund-shares-email-slot", "priority": "must-find", "note": ""}
+{"change": "webhook-api/refunds", "id": "refund-before-payment-409", "priority": "must-find", "note": ""}
+{"change": "webhook-api/refunds", "id": null, "missing": ""}

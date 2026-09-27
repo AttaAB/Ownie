@@ -31,10 +31,10 @@ is used after someone (or an AI) makes a change.
 
 | Change | Feature request (the agent's only instructions) | Labels |
 |---|---|---|
-| link-shortener/custom-alias-expiry | custom alias + optional expiry date | 5 (2 must-find) |
+| link-shortener/custom-alias-expiry | custom alias + optional expiry date | 5 (3 must-find) |
 | notes-app/image-attachments | attach images; show them on the shared page | 5 (2 must-find) |
-| sync-cli/multi-folder-sync | several folders from a config file, in parallel | 5 (2 must-find) |
-| webhook-api/refunds | refund webhook → update status, email the customer | 4 (2 must-find) |
+| sync-cli/multi-folder-sync | several folders from a config file, in parallel | 5 (3 must-find) |
+| webhook-api/refunds | refund webhook → update status, email the customer | 4 (4 must-find) |
 
 Labels are AI-drafted and fact-checked against the code (every
 `path:line` validated); **priorities are the developer's call** — a

@@ -16,7 +16,7 @@
 project: webhook-api
 change: refunds
 language: typescript
-verified: false
+verified: true
 
 decisions:
   - id: refund-before-payment-409
@@ -79,7 +79,7 @@ decisions:
     location: src/email.ts:66-69
     also_at: [src/db.ts:96-98, src/db.ts:161-169]
     category: correctness
-    priority: nice-to-find
+    priority: must-find
     key_point: >
       There's one email_status per payment. A refund resets it to pending,
       and the worker picks the template from amount_refunded > 0. So if the
@@ -108,7 +108,7 @@ decisions:
     location: src/db.ts:62
     also_at: [src/db.ts:14, src/app.ts:57-66]
     category: architecture
-    priority: nice-to-find
+    priority: must-find
     key_point: >
       The payment row gets amount_refunded and its status is overwritten
       with refunded / partially_refunded; the refund's own id (charge.id) is

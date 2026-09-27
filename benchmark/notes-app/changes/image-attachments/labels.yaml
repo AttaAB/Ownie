@@ -16,7 +16,7 @@
 project: notes-app
 change: image-attachments
 language: typescript
-verified: false
+verified: true
 
 decisions:
   - id: images-as-sqlite-blobs
@@ -24,7 +24,7 @@ decisions:
     location: lib/db.ts:47-54
     also_at: [lib/images.ts:4-5, lib/images.ts:100-112]
     category: architecture
-    priority: must-find
+    priority: nice-to-find
     key_point: >
       Keeping images in the same database means they're backed up with their
       note and removed by ON DELETE CASCADE, with no orphaned files. The cost:
@@ -125,7 +125,7 @@ decisions:
     location: lib/images.ts:62-63
     also_at: ["app/notes/[id]/page.tsx:39"]
     category: correctness
-    priority: nice-to-find
+    priority: must-find
     key_point: >
       The edit form is keyed on note.updatedAt, so bumping it would remount
       the form and wipe unsaved text edits; the agent chose not to touch it.

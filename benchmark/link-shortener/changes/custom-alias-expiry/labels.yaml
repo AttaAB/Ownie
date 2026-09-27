@@ -15,7 +15,7 @@
 project: link-shortener
 change: custom-alias-expiry
 language: python
-verified: false
+verified: true
 
 decisions:
   - id: alias-check-then-insert
@@ -48,7 +48,7 @@ decisions:
     location: app/links.py:69-76
     also_at: [app/main.py:42-44, app/links.py:44-45]
     category: correctness
-    priority: must-find
+    priority: nice-to-find
     key_point: >
       Nothing deletes expired links: each redirect compares expires_at with
       the current time and returns 410 Gone. Because the row stays, an
@@ -72,7 +72,7 @@ decisions:
     location: app/links.py:30-34
     also_at: [app/links.py:53-59, app/main.py:24]
     category: correctness
-    priority: nice-to-find
+    priority: must-find
     key_point: >
       expires_at is compared with datetime.utcnow(), and an input without a
       timezone offset is kept as-is, i.e. interpreted as UTC. A user who
@@ -96,7 +96,7 @@ decisions:
     location: app/links.py:10-11
     also_at: [app/links.py:39, app/main.py:37]
     category: maintainability
-    priority: nice-to-find
+    priority: must-find
     key_point: >
       Fixed routes like /health win over /{code}, so an alias with the same
       name could be created but never resolve; RESERVED_ALIASES blocks those

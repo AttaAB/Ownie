@@ -15,7 +15,7 @@
 project: sync-cli
 change: multi-folder-sync
 language: python
-verified: false
+verified: true
 
 decisions:
   - id: thread-per-folder-isolation
@@ -50,7 +50,7 @@ decisions:
     location: sync_cli/cli.py:207-220
     also_at: [sync_cli/sync.py:157-160, sync_cli/cli.py:196-197, sync_cli/cli.py:204]
     category: reliability
-    priority: must-find
+    priority: nice-to-find
     key_point: >
       Signals only reach the main thread, so the interrupt sets a stop event
       that workers check between files — each finishes its current download
@@ -78,7 +78,7 @@ decisions:
     location: sync_cli/cli.py:186-194
     also_at: [sync_cli/cli.py:123-132]
     category: reliability
-    priority: nice-to-find
+    priority: must-find
     key_point: >
       All per-folder locks are taken up front; if one is held, it releases
       the others and exits with code 2. That prevents two processes writing
@@ -101,7 +101,7 @@ decisions:
     location: sync_cli/cli.py:78-84
     also_at: [sync_cli/cli.py:74]
     category: correctness
-    priority: nice-to-find
+    priority: must-find
     key_point: >
       Two jobs writing into the same or nested directories would overwrite
       each other's files and state/lock files; comparing realpaths (so
