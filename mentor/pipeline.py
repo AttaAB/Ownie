@@ -1,4 +1,4 @@
-"""The non-interactive analysis: scope → context → decisions → verified → ranked.
+"""The non-interactive analysis: scope → context → decisions → verified.
 
 Shared by the CLI and the eval runner, so what gets measured is exactly
 what users get.
@@ -7,7 +7,7 @@ what users get.
 from dataclasses import dataclass
 
 from mentor.context import build_context
-from mentor.llm import extract_decisions, rank_decisions
+from mentor.llm import extract_decisions
 from mentor.verify import filter_decisions
 
 
@@ -25,7 +25,6 @@ def analyze(scope, owned_titles=()):
   context = build_context(scope)
   found = extract_decisions(context.text, scope.label, owned_titles=owned_titles)
   decisions, dropped = filter_decisions(found, context.visible_lines)
-  decisions = rank_decisions(decisions)
 
   return Analysis(
     decisions=decisions,

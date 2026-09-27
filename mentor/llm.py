@@ -4,7 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from mentor.models import DecisionSet, Grade, Ranking
+from mentor.models import DecisionSet, Grade
 
 USER_ENV_FILE = Path.home() / ".config" / "mentor" / ".env"
 DEV_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
@@ -119,24 +119,6 @@ Code:
 {context}
 """
 
-RANK_PROMPT = """\
-A developer is taking ownership of code they did not write themselves.
-Below are design decisions found in that code. Only the first few will be
-asked about now; the rest are kept for later.
-
-Order them by one test: if a reviewer asked about this decision in a code
-review, how embarrassed would the developer be not to be able to explain
-it? Put first the decisions that are central to what the code is for and
-whose consequences a reviewer would expect the author to know. Put later
-the ones that are peripheral, unlikely to matter in practice, or that a
-reviewer would forgive not knowing.
-
-Return every decision number exactly once, most important first.
-
-Decisions:
-{decisions}
-"""
-
 GRADE_PROMPT = """\
 You are grading whether a developer understands a design decision in their
 own codebase (code they may not have written themselves).
@@ -194,26 +176,6 @@ def extract_decisions(context, scope_label, max_decisions=MAX_DECISIONS, owned_t
     context=context,
   )
   return parse(prompt, DecisionSet).decisions
-
-
-def rank_decisions(decisions):
-  """Re-order decisions with a focused second call; never drops any."""
-  if len(decisions) < 2:
-    return list(decisions)
-
-  listed = "\n\n".join(
-    f"{i}. {d.title} ({d.category}, {d.location})\n"
-    f"   What the code does: {d.chosen}\n"
-    f"   Consequences: " + "; ".join(d.consequences)
-    for i, d in enumerate(decisions, start=1)
-  )
-  order = parse(RANK_PROMPT.format(decisions=listed), Ranking).order
-
-  # Keep valid, first-seen numbers in the model's order; anything it left
-  # out goes after, in the original order.
-  picked = list(dict.fromkeys(n - 1 for n in order if 1 <= n <= len(decisions)))
-  picked += [i for i in range(len(decisions)) if i not in picked]
-  return [decisions[i] for i in picked]
 
 
 def grade_answer(decision, answer, attempt=1):

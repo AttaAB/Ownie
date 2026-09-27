@@ -15,7 +15,6 @@ mentor review
               context.py      code → line-numbered text for the model
               llm.py          extract decisions (each with a hidden answer key)
               verify.py       drop decisions whose file:line citations don't exist
-              llm.py          rank them in a separate, focused call
         └─ session.py ───── ask → answer → grade (llm.py) → hint / explain
         └─ record.py ────── .mentor/state.json → .mentor/DECISIONS.md
         ui.py renders everything; models.py defines the shared data shapes
@@ -30,9 +29,9 @@ mentor review
 | `git.py` | Thin wrapper around the `git` command line. |
 | `pipeline.py` | `analyze(scope)`: the non-interactive core. **The CLI and the evals both call this**, so what we measure is what users get. |
 | `context.py` | Turns the scope into text for the model, with a line number on every line so it can cite `file:line`. |
-| `llm.py` | The model calls: `extract_decisions`, `rank_decisions` and `grade_answer`, plus their prompts. |
+| `llm.py` | The two model calls: `extract_decisions` and `grade_answer`, plus their prompts. |
 | `verify.py` | Deterministic check: a decision survives only if one of its citations points at code the model was actually shown. |
-| `models.py` | `Decision` (the answer key + the question), `Ranking` and `Grade`. |
+| `models.py` | `Decision` (the answer key + the question) and `Grade`. |
 | `session.py` | The interactive question loop. |
 | `record.py` | Saves review state and regenerates `DECISIONS.md` from it. |
 | `ui.py` | Everything the user sees (rich panels, code snippets, end card). |
@@ -70,10 +69,6 @@ quality is checked with human ratings (`evals/rate.py`) instead.
 - **Local git, not the GitHub API.** Works before a PR exists, on any
   branch, with no rate limits. Default scope is "since last review" so
   it works for people who commit straight to main.
-- **Finding and ranking are separate calls.** Extraction is good at
-  finding decisions but weak at putting the must-knows first; a second,
-  small call re-orders them by "would you be embarrassed not to explain
-  this in a code review?". It only re-orders, so it can't lose decisions.
 - **One shared pipeline.** The eval can't drift from the product.
 - **The grader never gives false confidence.** It would rather mark a
   good answer "partial" than mark a wrong one "owned".
