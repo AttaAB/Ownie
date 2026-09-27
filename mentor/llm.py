@@ -108,7 +108,10 @@ Rules for questions:
   contrived setup (no "suppose the clock jumps back at exactly the moment...").
   A developer who understands the decision should be able to answer it.
 - Never state the consequence or the fix inside the question or the setup.
-- One decision per question. Answerable in a few sentences.
+- One decision per question, one scenario, asking one thing — no second
+  part ("…and where is that decided?", "…and what if instead…?"). If a
+  decision has two important consequences, ask about the more central
+  one. Answerable in a few sentences.
 - The hint nudges toward where to look or what to consider, without
   giving the answer.
 
