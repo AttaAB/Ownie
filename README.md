@@ -53,6 +53,28 @@ A session looks like this (abridged, from a real run on a small Flask API):
 At the end you get an ownership score for the repo and a record in
 `.mentor/DECISIONS.md`. The next `mentor review` only covers what's new.
 
+## Use it inside Claude Code
+
+Install the `/mentor` command once:
+
+```bash
+mkdir -p ~/.claude/commands
+curl -fsSL -o ~/.claude/commands/mentor.md \
+  https://raw.githubusercontent.com/AttaAB/engineer-mentor/main/integrations/claude-code/mentor.md
+```
+
+Then, right after Claude writes code, type `/mentor --uncommitted` (or
+`/mentor`, `/mentor --more`, `/mentor --revisit`). Claude shows each
+question and passes your answers to `mentor answer` for grading — it's
+told not to hint or answer for you. It uses the same `.mentor/` record as
+the terminal version, via JSON commands you can use from any tool:
+
+```bash
+mentor ask [--uncommitted | --all | --more | --revisit ...] [-n N]
+mentor answer ID "your answer"      # or the answer on stdin
+mentor hint ID · mentor explain ID · mentor skip ID
+```
+
 ## Commands
 
 ```bash

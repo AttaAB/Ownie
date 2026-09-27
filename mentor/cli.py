@@ -6,9 +6,9 @@ from pathlib import Path
 from mentor import git as g
 from mentor import ui
 from mentor.llm import MissingAPIKey, ensure_api_key
-from mentor.pipeline import analyze
-from mentor.record import (DECISIONS_FILE, known_decisions, load_state, mark_changed, ownership, pending_decisions,
-                           revisit_decisions, save_state)
+from mentor.pipeline import queue_review
+from mentor.record import (DECISIONS_FILE, load_state, mark_changed, ownership, pending_decisions, revisit_decisions,
+                           save_state)
 from mentor.scope import EMPTY_TREE, _diff_scope, resolve_scope
 from mentor.session import QuitSession, read_input, run_session
 
@@ -30,6 +30,9 @@ grades your answers, and records what you understand in
 Usage:
   mentor review [options]
   mentor status              where this repo stands (no questions, no API calls)
+  mentor ask | answer | hint | explain | skip
+                             the same review as JSON commands, for tools like
+                             Claude Code (see integrations/claude-code/)
 
 What to review (pick at most one; default is "recent changes"):
   (no option)          on a branch: changes since it split from main
@@ -90,6 +93,20 @@ def main(argv=None):
   status = sub.add_parser("status", add_help=False, allow_abbrev=False)
   status.add_argument("-h", "--help", action="store_true")
 
+  ask = sub.add_parser("ask", add_help=False, allow_abbrev=False)
+  ask.add_argument("-h", "--help", action="store_true")
+  for flag in ("--all", "--uncommitted", "--more", "--revisit"):
+    ask.add_argument(flag, action="store_true")
+  ask.add_argument("--since", metavar="REF")
+  ask.add_argument("--base", metavar="BRANCH")
+  ask.add_argument("-n", type=int, default=QUESTIONS_PER_RUN)
+  for name in ("answer", "hint", "explain", "skip"):
+    cmd = sub.add_parser(name, add_help=False, allow_abbrev=False)
+    cmd.add_argument("-h", "--help", action="store_true")
+    cmd.add_argument("id")
+    if name == "answer":
+      cmd.add_argument("text", nargs="*", help="the answer; read from stdin if omitted")
+
   args = parser.parse_args(argv)
   if args.help:
     print(OVERVIEW)
@@ -102,6 +119,8 @@ def main(argv=None):
 
   if args.command == "status":
     return show_status()
+  if args.command in ("ask", "answer", "hint", "explain", "skip"):
+    return run_headless(args)
   if args.more and args.revisit:
     parser.error("use either --more or --revisit, not both")
 
@@ -133,15 +152,11 @@ def review_scope(args):
   if not any(looks_like_code(path) for path in scope.files + scope.untracked):
     ui.note("Only config/docs changed, so decisions may be shallow. `mentor review --all` looks at everything.")
 
-  changed = mark_changed(state)
+  with ui.working(f"Reading {scope.label} and finding design decisions…"):
+    analysis, decisions, changed = queue_review(state, scope)
   if changed:
     ui.note(f"{len(changed)} decision(s) you owned have changed code since, so they're back in scope: "
             + "; ".join(changed))
-
-  with ui.working(f"Reading {scope.label} and finding design decisions…"):
-    analysis = analyze(scope, known=known_decisions(state))
-  # the prompt asks for this; enforce it, since an owned decision re-asked is noise
-  decisions = [d for d in analysis.decisions if state["decisions"].get(d.id, {}).get("status") != "owned"]
 
   ui.step(args.verbose, "context", f"{analysis.context_source} · {len(analysis.context_text):,} chars")
   if analysis.truncated:
@@ -150,20 +165,15 @@ def review_scope(args):
   for decision, reason in analysis.dropped:
     ui.step(args.verbose, "", f"  dropped “{decision.title}” — {reason}")
 
-  state["last_reviewed_commit"] = g.head_commit()
-
-  # keep leftovers from earlier reviews that this one didn't return again (same id = same decision)
-  new_ids = {d.id for d in decisions}
-  leftovers = [d for d in pending_decisions(state) if d.id not in new_ids]
-
   if not decisions:
     save_state(state)
     ui.info("No new design decisions worth asking about in this change.")
     return
 
   asked = decisions[:args.n]
+  asked_ids = {d.id for d in asked}
   ui.found(len(decisions), len(asked), scope.label)
-  finish(state, asked, decisions[args.n:] + leftovers, scope.label)
+  finish(state, asked, [d for d in pending_decisions(state) if d.id not in asked_ids], scope.label)
 
 
 def review_pending(args):
@@ -175,6 +185,26 @@ def review_pending(args):
 
   ui.info(f"{len(pending)} decision(s) left from the last review.")
   finish(state, pending[:args.n], pending[args.n:], "continued review")
+
+
+def run_headless(args):
+  from mentor import headless
+  try:
+    if args.command in ("ask", "answer"):
+      ensure_api_key()
+    if args.command == "ask":
+      if args.more and args.revisit:
+        sys.exit("mentor: use either --more or --revisit, not both")
+      headless.ask(args)
+    elif args.command == "answer":
+      text = " ".join(args.text) if args.text else sys.stdin.read().strip()
+      if not text:
+        sys.exit("mentor: no answer given (pass it as an argument or on stdin)")
+      headless.answer(args.id, text)
+    else:
+      getattr(headless, args.command)(args.id)
+  except (g.GitError, MissingAPIKey) as error:
+    sys.exit(f"mentor: {error}")
 
 
 def show_status():

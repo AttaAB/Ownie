@@ -6,8 +6,10 @@ what users get.
 
 from dataclasses import dataclass
 
+from mentor import git as g
 from mentor.context import build_context
 from mentor.llm import extract_decisions
+from mentor.record import known_decisions, mark_changed, pending_decisions
 from mentor.verify import filter_decisions
 
 
@@ -35,3 +37,23 @@ def analyze(scope, known=()):
     truncated=context.truncated,
     context_source="whole files" if scope.kind == "all" else "diff only",
   )
+
+
+def queue_review(state, scope):
+  """Find decisions in `scope` and put them at the front of the queue.
+
+  Shared by `mentor review` and `mentor ask`. Returns (analysis, new
+  decisions, titles of owned decisions whose code changed); the caller
+  saves the state.
+  """
+  changed = mark_changed(state)
+  analysis = analyze(scope, known=known_decisions(state))
+  # the prompt asks for this; enforce it, since an owned decision re-asked is noise
+  decisions = [d for d in analysis.decisions if state["decisions"].get(d.id, {}).get("status") != "owned"]
+
+  # keep leftovers from earlier reviews that this one didn't return again (same id = same decision)
+  new_ids = {d.id for d in decisions}
+  leftovers = [d for d in pending_decisions(state) if d.id not in new_ids]
+  state["pending"] = [d.model_dump() for d in decisions + leftovers]
+  state["last_reviewed_commit"] = g.head_commit()
+  return analysis, decisions, changed
