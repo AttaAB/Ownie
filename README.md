@@ -71,7 +71,9 @@ pipeline users get and scores it:
 .venv/bin/pip install -e ".[eval]"
 python -m evals.run                         # all projects × 3 runs → evals/results/
 python -m evals.run --config my-change      # name a variant
+python -m evals.run --suite change          # review only each project's follow-up change
 python -m evals.compare baseline my-change  # side-by-side with deltas
+python -m evals.benchmark --check           # every label's path:line exists
 ```
 
 | Metric | Meaning |

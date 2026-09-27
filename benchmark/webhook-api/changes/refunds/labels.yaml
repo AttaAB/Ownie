@@ -1,0 +1,128 @@
+# Ground-truth design decisions in the refunds change.
+# Field meanings: see ../../../link-shortener/labels.yaml. Locations cite
+# the code AFTER the change; each `location` must fall on lines the change
+# touched (checked by `python -m evals.benchmark --check`).
+#
+# Provenance: written by a fresh Claude Code agent given only the feature
+# request below and the project folder — no knowledge of mentor, the
+# benchmark, or the labels; no design steering. Not typechecked (no
+# node_modules in the benchmark copy).
+#   "Handle refunds: when the payment provider sends a refund webhook,
+#    update the payment's status and email the customer that they've been
+#    refunded. Keep it simple and get it working."
+# Labels drafted by AI; priorities are suggestions until the developer
+# verifies them.
+
+project: webhook-api
+change: refunds
+language: typescript
+verified: false
+
+decisions:
+  - id: refund-before-payment-409
+    title: A refund for an unknown payment is rejected with 409 so the provider retries it
+    location: src/app.ts:130-136
+    also_at: [src/db.ts:122-126, src/app.ts:143-149]
+    category: reliability
+    priority: must-find
+    key_point: >
+      Nothing is stored for a refund whose payment isn't recorded yet; the
+      409 makes the provider redeliver it later, which handles out-of-order
+      events. But it relies entirely on the provider's retry window: if the
+      payment never gets recorded — e.g. its payment_intent.succeeded event
+      was rejected with a 400 for having no customer — every retry fails,
+      the refund is eventually dropped for good, and the endpoint keeps
+      reporting failures to the provider.
+    answers:
+      good: >
+        If the refund arrives before we've stored the payment, it returns 409
+        without saving anything, so the provider sends it again later — that
+        covers events arriving out of order. But if the payment is never
+        stored, like when its original event was rejected for missing a
+        customer, the refund fails on every retry and is lost once the
+        provider stops retrying.
+      partial: >
+        It returns 409 when the payment doesn't exist.
+      wrong: >
+        It creates the payment from the refund event, so refunds work even
+        if the payment webhook was never received.
+
+  - id: refund-total-only-increases
+    title: A refund is applied only if its cumulative total is higher than the stored one
+    location: src/db.ts:89-100
+    also_at: [src/db.ts:127-133, src/app.ts:26-33]
+    category: correctness
+    priority: must-find
+    key_point: >
+      The provider sends the cumulative amount_refunded, and the UPDATE only
+      runs when it's larger than what's stored. That makes re-sent and
+      out-of-order refund events harmless (no rollback of a newer total, no
+      duplicate email) even when they arrive under new event ids. The flip
+      side: the stored total can never go down, so a refund that later fails
+      or is reversed at the provider is never reflected, and the event is
+      still marked processed even when the UPDATE changed nothing.
+    answers:
+      good: >
+        The provider reports the running total refunded, and the update only
+        applies if that total is bigger than what we have. So a duplicate or
+        late event can't roll the status back or send a second email. But it
+        also means the total can only go up — if a refund fails or gets
+        reversed on the provider's side, we'd never record that.
+      partial: >
+        Duplicate refund events are ignored.
+      wrong: >
+        Each refund event's amount is added to amount_refunded, so two
+        partial refunds are summed.
+
+  - id: refund-shares-email-slot
+    title: Refund emails reuse the payment's single email-queue status
+    location: src/email.ts:66-69
+    also_at: [src/db.ts:96-98, src/db.ts:161-169]
+    category: correctness
+    priority: nice-to-find
+    key_point: >
+      There's one email_status per payment. A refund resets it to pending,
+      and the worker picks the template from amount_refunded > 0. So if the
+      confirmation hadn't been sent yet, the customer only ever gets the
+      refund email; several partial refunds before the worker runs produce
+      one email with the cumulative total. markEmailSent/Failed only update
+      rows still 'sending' — a safeguard so a refund that re-queues the row
+      mid-send isn't overwritten as 'sent'.
+    answers:
+      good: >
+        Each payment has only one email slot. A refund puts it back to
+        pending and the worker sends the refund template whenever anything
+        has been refunded — so if the confirmation hadn't gone out yet, the
+        customer never gets it, and two quick partial refunds become one
+        email with the total. The "only if still sending" condition stops a
+        mid-send refund from being marked as already sent.
+      partial: >
+        After a refund the payment's email is set back to pending so a
+        refund email gets sent.
+      wrong: >
+        Refund emails are sent immediately inside the webhook handler, as a
+        separate email from the confirmation.
+
+  - id: refund-as-running-total
+    title: Refunds are stored as a running total on the payment row, not as separate records
+    location: src/db.ts:62
+    also_at: [src/db.ts:14, src/app.ts:57-66]
+    category: architecture
+    priority: nice-to-find
+    key_point: >
+      The payment row gets amount_refunded and its status is overwritten
+      with refunded / partially_refunded; the refund's own id (charge.id) is
+      discarded. That's simple, but there's no per-refund history — no
+      individual amounts, dates, or provider refund ids — so you can't answer
+      "which refunds happened when" or reconcile with the provider refund by
+      refund, and the payment's original status is lost.
+    answers:
+      good: >
+        It just keeps a cumulative amount_refunded on the payment and
+        overwrites its status. There's no refunds table and the charge id
+        isn't saved, so we can't list individual refunds or when they
+        happened, which makes reconciling with the provider harder.
+      partial: >
+        It adds an amount_refunded column to payments.
+      wrong: >
+        Each refund is stored as its own row linked to the payment.

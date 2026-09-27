@@ -1,0 +1,487 @@
+diff --git a/README.md b/README.md
+index 9bb46ba..ade8c74 100644
+--- a/README.md
++++ b/README.md
+@@ -19,6 +19,39 @@ the changes up. Other options: `--once`, `--dry-run`, `--retries N`,
+ `--timeout S`, `--manifest-path PATH`, `--allow-empty`. `./sync-cli` is a thin
+ wrapper around `python3 -m sync_cli`.
+ 
++## Several folders at once
++
++List the folders in a JSON config file and pass `--config` instead of
++`SERVER DEST`. Every folder syncs in parallel, on its own thread and its own
++schedule, so a slow or unreachable server doesn't hold the others up.
++
++```json
++{
++  "folders": [
++    {"server": "http://127.0.0.1:8000", "dest": "demo/local-a", "name": "a"},
++    {"server": "http://127.0.0.1:8001", "dest": "demo/local-b",
++     "manifest_path": "/manifest.json"}
++  ]
++}
++```
++
++```sh
++./sync-cli --config sync.json --interval 10
++```
++
++- `server` and `dest` are required; `name` (used to prefix log lines,
++  defaults to `dest`) and `manifest_path` are optional.
++- A relative `dest` is resolved against the config file's directory.
++- Destinations must not be the same folder or nested inside each other.
++- The other options (`--interval`, `--once`, `--dry-run`, `--retries`,
++  `--timeout`, `--allow-empty`) apply to every folder.
++- Each folder takes its own lock; if any is already being synced by another
++  instance, sync-cli exits with code 2 before starting.
++- With `--once`, the exit code is 0 only if every folder synced cleanly.
++- Live progress bars are replaced by one line per file when several folders
++  share the terminal.
++- Ctrl+C lets in-flight downloads finish, then stops; press it again to force.
++
+ ## What the server must provide
+ 
+ - `GET /manifest.json` returns `{"files": [{"path": "a/b.txt", "size": 123, "sha256": "..."}]}`
+diff --git a/sync_cli/cli.py b/sync_cli/cli.py
+index f8bd143..1d319ec 100644
+--- a/sync_cli/cli.py
++++ b/sync_cli/cli.py
+@@ -1,30 +1,98 @@
+-"""Command-line entry point: one-shot or scheduled sync."""
++"""Command-line entry point: one-shot or scheduled sync of one or more folders."""
+ import argparse
+ import datetime
+ import fcntl
++import json
+ import os
+ import signal
+ import sys
+-import time
++import threading
++from dataclasses import dataclass
+ 
+ from .remote import Remote, RemoteError, RetryPolicy
+ from .sync import LOCK_NAME, run_sync
+ 
++_log_lock = threading.Lock()
++
+ 
+ def log(msg):
+-    print(msg, file=sys.stderr, flush=True)
++    with _log_lock:  # one write per line so parallel syncs don't interleave
++        sys.stderr.write(msg + "\n")
++        sys.stderr.flush()
+ 
+ 
+ def stamp():
+     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+ 
+ 
++@dataclass
++class Folder:
++    """One remote folder mirrored into one local folder."""
++    server: str
++    dest: str
++    manifest_path: str = "/manifest.json"
++    name: str = ""
++
++
++class ConfigError(Exception):
++    pass
++
++
++def load_config(path):
++    """Read a JSON config listing the folders to sync.
++
++    {"folders": [{"server": "http://host:8000", "dest": "local/a",
++                  "manifest_path": "/manifest.json", "name": "a"}, ...]}
++
++    Only "server" and "dest" are required. A relative "dest" is resolved
++    against the config file's own directory.
++    """
++    try:
++        with open(path) as f:
++            data = json.load(f)
++    except OSError as exc:
++        raise ConfigError(f"cannot read config {path}: {exc}") from exc
++    except ValueError as exc:
++        raise ConfigError(f"config {path} is not valid JSON: {exc}") from exc
++    entries = data.get("folders") if isinstance(data, dict) else None
++    if not isinstance(entries, list) or not entries:
++        raise ConfigError("config must be an object with a non-empty 'folders' list")
++
++    base = os.path.dirname(os.path.abspath(path))
++    folders = []
++    for i, e in enumerate(entries, 1):
++        if not isinstance(e, dict) or not isinstance(e.get("server"), str) \
++                or not isinstance(e.get("dest"), str) or not e["server"] or not e["dest"]:
++            raise ConfigError(f"folder #{i} needs string 'server' and 'dest' fields")
++        unknown = set(e) - {"server", "dest", "manifest_path", "name"}
++        if unknown:
++            raise ConfigError(f"folder #{i} has unknown field(s): {', '.join(sorted(unknown))}")
++        dest = os.path.join(base, os.path.expanduser(e["dest"]))
++        folders.append(Folder(server=e["server"], dest=os.path.normpath(dest),
++                              manifest_path=e.get("manifest_path") or "/manifest.json",
++                              name=str(e.get("name") or e["dest"])))
++    check_distinct(folders)
++    return folders
++
++
++def check_distinct(folders):
++    """Two folders writing to the same (or a nested) directory would fight."""
++    real = [(f, os.path.realpath(f.dest)) for f in folders]
++    for i, (a, ra) in enumerate(real):
++        for b, rb in real[i + 1:]:
++            if ra == rb or rb.startswith(ra + os.sep) or ra.startswith(rb + os.sep):
++                raise ConfigError(f"destinations overlap: {a.dest} and {b.dest}")
++
++
+ def parse_args(argv):
+     p = argparse.ArgumentParser(
+         prog="sync-cli",
+-        description="Mirror files from a remote HTTP server into a local folder.")
+-    p.add_argument("server", help="base URL of the server, e.g. http://127.0.0.1:8000")
+-    p.add_argument("dest", help="local folder to keep in sync")
++        description="Mirror files from a remote HTTP server into a local folder. "
++                    "Use --config to sync several folders in parallel.")
++    p.add_argument("server", nargs="?", help="base URL of the server, e.g. http://127.0.0.1:8000")
++    p.add_argument("dest", nargs="?", help="local folder to keep in sync")
++    p.add_argument("--config", metavar="FILE",
++                   help="JSON file listing several server/dest folders to sync in parallel")
+     p.add_argument("--manifest-path", default="/manifest.json",
+                    help="path of the JSON file listing (default: /manifest.json)")
+     p.add_argument("--interval", type=float, default=300,
+@@ -38,6 +106,17 @@ def parse_args(argv):
+     args = p.parse_args(argv)
+     if args.interval <= 0 or args.retries < 1:
+         p.error("--interval must be > 0 and --retries >= 1")
++    if args.config and (args.server or args.dest):
++        p.error("give either SERVER DEST or --config, not both")
++    if not args.config and not (args.server and args.dest):
++        p.error("SERVER and DEST are required (or use --config FILE)")
++    if args.config:
++        try:
++            args.folders = load_config(args.config)
++        except ConfigError as exc:
++            p.error(str(exc))
++    else:
++        args.folders = [Folder(args.server, args.dest, args.manifest_path)]
+     return args
+ 
+ 
+@@ -53,18 +132,49 @@ def acquire_lock(dest):
+     return fh
+ 
+ 
+-def sync_once(remote, args):
+-    log(f"[{stamp()}] syncing {args.server} -> {args.dest}")
+-    try:
+-        r = run_sync(remote, args.dest, dry_run=args.dry_run,
+-                     allow_empty=args.allow_empty, log=log)
+-    except RemoteError as exc:
+-        log(f"[{stamp()}] sync failed: {exc}")
+-        return False
+-    status = "done" if r.ok else f"done with {len(r.failed)} failure(s)"
+-    log(f"[{stamp()}] {status}: {r.downloaded} downloaded, {r.deleted} deleted, "
+-        f"{r.unchanged} unchanged")
+-    return r.ok
++class Job:
++    """Syncs one folder, on its own thread when several run in parallel."""
++
++    def __init__(self, folder, args, parallel, stop):
++        self.folder = folder
++        self.args = args
++        self.stop = stop
++        self.prefix = f"[{folder.name}] " if parallel else ""
++        self.parallel = parallel
++        self.remote = Remote(folder.server, folder.manifest_path, timeout=args.timeout,
++                             retry=RetryPolicy(attempts=args.retries), log=self.log)
++        self.ok = True
++
++    def log(self, msg):
++        # Keep a leading newline/indent readable while adding the folder prefix.
++        log(self.prefix + msg if not msg.startswith("  ") else "  " + self.prefix + msg[2:])
++
++    def sync_once(self):
++        f = self.folder
++        self.log(f"[{stamp()}] syncing {f.server} -> {f.dest}")
++        try:
++            r = run_sync(self.remote, f.dest, dry_run=self.args.dry_run,
++                         allow_empty=self.args.allow_empty, log=self.log,
++                         label=self.prefix, live_progress=not self.parallel,
++                         stop=self.stop)
++        except RemoteError as exc:
++            self.log(f"[{stamp()}] sync failed: {exc}")
++            return False
++        status = "done" if r.ok else f"done with {len(r.failed)} failure(s)"
++        self.log(f"[{stamp()}] {status}: {r.downloaded} downloaded, {r.deleted} deleted, "
++                 f"{r.unchanged} unchanged")
++        return r.ok
++
++    def run(self):
++        try:
++            while not self.stop.is_set():
++                self.ok = self.sync_once()  # a failed cycle is logged; retried next cycle
++                if self.args.once:
++                    return
++                self.stop.wait(self.args.interval)
++        except Exception as exc:  # don't let one folder's bug kill the others silently
++            self.ok = False
++            self.log(f"[{stamp()}] unexpected error: {type(exc).__name__}: {exc}")
+ 
+ 
+ def _raise_interrupt(signum, frame):
+@@ -73,23 +183,39 @@ def _raise_interrupt(signum, frame):
+ 
+ def main(argv=None):
+     args = parse_args(argv)
+-    lock = acquire_lock(args.dest)
+-    if lock is None:
+-        log(f"another sync-cli is already running for {args.dest}")
+-        return 2
++    locks = []
++    for f in args.folders:
++        lock = acquire_lock(f.dest)
++        if lock is None:
++            log(f"another sync-cli is already running for {f.dest}")
++            for held in locks:
++                held.close()
++            return 2
++        locks.append(lock)
+ 
+     # Treat SIGTERM like Ctrl+C so partial downloads are cleaned up either way.
+     signal.signal(signal.SIGTERM, _raise_interrupt)
+ 
+-    remote = Remote(args.server, args.manifest_path, timeout=args.timeout,
+-                    retry=RetryPolicy(attempts=args.retries), log=log)
+-    try:
+-        if args.once:
+-            return 0 if sync_once(remote, args) else 1
++    stop = threading.Event()
++    parallel = len(args.folders) > 1
++    jobs = [Job(f, args, parallel, stop) for f in args.folders]
++    if not args.once:
+         log(f"running every {args.interval:g}s; Ctrl+C to stop")
+-        while True:
+-            sync_once(remote, args)  # a failed cycle is logged; we retry next cycle
+-            time.sleep(args.interval)
++    threads = [threading.Thread(target=j.run, name=j.folder.name, daemon=True) for j in jobs]
++    for t in threads:
++        t.start()
++    try:
++        for t in threads:
++            while t.is_alive():
++                t.join(0.2)  # short timeouts keep Ctrl+C responsive
+     except KeyboardInterrupt:
+-        log("\nstopped")
++        log("\nstopping (finishing current downloads; Ctrl+C again to force)...")
++        stop.set()
++        try:
++            for t in threads:
++                t.join()
++        except KeyboardInterrupt:
++            pass
++        log("stopped")
+         return 130
++    return 0 if all(j.ok for j in jobs) else 1
+diff --git a/sync_cli/progress.py b/sync_cli/progress.py
+index 44014f8..1c805ae 100644
+--- a/sync_cli/progress.py
++++ b/sync_cli/progress.py
+@@ -11,12 +11,14 @@ def fmt_bytes(n):
+ 
+ 
+ class FileProgress:
+-    def __init__(self, label, total, stream=sys.stderr, width=24):
++    def __init__(self, label, total, stream=sys.stderr, width=24, live=True):
+         self.label = label
+         self.total = max(total, 0)
+         self.stream = stream
+         self.width = width
+-        self.tty = stream.isatty()
++        # Live bars redraw one line with \r, so they only work when a single
++        # sync writes to the terminal; parallel syncs pass live=False.
++        self.tty = live and stream.isatty()
+         self.start = time.monotonic()
+         self._last_draw = 0.0
+ 
+diff --git a/sync_cli/sync.py b/sync_cli/sync.py
+index 819d08b..9671f18 100644
+--- a/sync_cli/sync.py
++++ b/sync_cli/sync.py
+@@ -7,7 +7,6 @@ files you put in the folder are left alone.
+ import hashlib
+ import json
+ import os
+-import sys
+ from dataclasses import dataclass, field
+ 
+ from .progress import FileProgress
+@@ -31,7 +30,7 @@ class State:
+     """Remembers what we downloaded so we can skip unchanged files cheaply
+     and know which local files are ours to delete."""
+ 
+-    def __init__(self, dest):
++    def __init__(self, dest, log=print):
+         self.path = os.path.join(dest, STATE_NAME)
+         self.files = {}
+         try:
+@@ -41,7 +40,7 @@ class State:
+         except FileNotFoundError:
+             pass
+         except (ValueError, OSError) as exc:
+-            print(f"warning: ignoring unreadable state file ({exc})", file=sys.stderr)
++            log(f"warning: ignoring unreadable state file ({exc})")
+ 
+     def save(self):
+         tmp = self.path + ".tmp"
+@@ -92,17 +91,17 @@ def local_path_for(dest, rel):
+     return full
+ 
+ 
+-def make_plan(remote_files, dest, state):
++def make_plan(remote_files, dest, state, log=print):
+     plan = Plan()
+     remote_paths = set()
+     for rf in remote_files:
+         if rf.path in RESERVED or rf.path.endswith(TMP_SUFFIX):
+-            print(f"warning: {rf.path} clashes with a sync-cli file; skipping", file=sys.stderr)
++            log(f"warning: {rf.path} clashes with a sync-cli file; skipping")
+             continue
+         remote_paths.add(rf.path)
+         lp = local_path_for(dest, rf.path)
+         if os.path.isdir(lp):
+-            print(f"warning: {rf.path} is a local directory; skipping", file=sys.stderr)
++            log(f"warning: {rf.path} is a local directory; skipping")
+             continue
+         if state.local_sha(rf.path, lp) == rf.sha256:
+             plan.unchanged += 1
+@@ -125,13 +124,17 @@ def remove_empty_parents(dest, path):
+         d = os.path.dirname(d)
+ 
+ 
+-def run_sync(remote, dest, dry_run=False, allow_empty=False, log=print):
++def run_sync(remote, dest, dry_run=False, allow_empty=False, log=print,
++             label="", live_progress=True, stop=None):
++    """Sync one folder. `label` prefixes progress lines, `live_progress=False`
++    turns off the redrawing bar (needed when several syncs share a terminal),
++    and `stop` is an optional threading.Event checked between downloads."""
+     os.makedirs(dest, exist_ok=True)
+-    state = State(dest)
++    state = State(dest, log=log)
+     result = Result()
+ 
+     remote_files = remote.list_files()  # raises RemoteError if unreachable
+-    plan = make_plan(remote_files, dest, state)
++    plan = make_plan(remote_files, dest, state, log=log)
+     result.unchanged = plan.unchanged
+ 
+     # Guard against wiping the mirror because the server briefly returned nothing.
+@@ -151,9 +154,13 @@ def run_sync(remote, dest, dry_run=False, allow_empty=False, log=print):
+ 
+     total = len(plan.download)
+     for i, rf in enumerate(plan.download, 1):
++        if stop is not None and stop.is_set():
++            log("  interrupted; remaining files will sync next time")
++            state.save()
++            return result
+         lp = local_path_for(dest, rf.path)
+         tmp = lp + TMP_SUFFIX
+-        bar = FileProgress(f"[{i}/{total}] {rf.path}", rf.size)
++        bar = FileProgress(f"{label}[{i}/{total}] {rf.path}", rf.size, live=live_progress)
+         try:
+             os.makedirs(os.path.dirname(lp), exist_ok=True)
+             remote.download(rf, tmp, bar.update)
+diff --git a/tests/test_sync.py b/tests/test_sync.py
+index 46059c0..80c1f31 100644
+--- a/tests/test_sync.py
++++ b/tests/test_sync.py
+@@ -7,7 +7,10 @@ from http.server import ThreadingHTTPServer
+ 
+ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ 
++import json  # noqa: E402
++
+ import fake_server  # noqa: E402
++from sync_cli import cli  # noqa: E402
+ from sync_cli.remote import Remote, RemoteError, RetryPolicy, is_safe_relpath  # noqa: E402
+ from sync_cli.sync import STATE_NAME, run_sync  # noqa: E402
+ 
+@@ -118,6 +121,77 @@ class FlakyTests(ServerCase):
+         self.assertEqual(leftovers, [])
+ 
+ 
++def start_server(root):
++    handler = type("H", (fake_server.Handler,), {"root": root, "log_message": lambda *a: None})
++    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
++    threading.Thread(target=server.serve_forever, daemon=True).start()
++    return server, f"http://127.0.0.1:{server.server_address[1]}"
++
++
++class MultiFolderTests(unittest.TestCase):
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        self.servers = []
++
++    def tearDown(self):
++        for s in self.servers:
++            s.shutdown()
++            s.server_close()
++        self.tmp.cleanup()
++
++    def path(self, *parts):
++        return os.path.join(self.tmp.name, *parts)
++
++    def write_config(self, folders):
++        cfg = self.path("sync.json")
++        with open(cfg, "w") as f:
++            json.dump({"folders": folders}, f)
++        return cfg
++
++    def test_config_syncs_each_folder_in_parallel(self):
++        folders = []
++        for name in ("one", "two", "three"):
++            root = self.path("remote", name)
++            os.makedirs(root)
++            with open(os.path.join(root, f"{name}.txt"), "w") as f:
++                f.write(name)
++            server, url = start_server(root)
++            self.servers.append(server)
++            folders.append({"server": url, "dest": f"local/{name}"})  # relative to config
++        cfg = self.write_config(folders)
++        self.assertEqual(cli.main(["--config", cfg, "--once", "--retries", "2"]), 0)
++        for name in ("one", "two", "three"):
++            self.assertEqual(sorted(n for n in os.listdir(self.path("local", name))
++                                    if not n.startswith(".")), [f"{name}.txt"])
++
++    def test_one_failing_folder_does_not_stop_the_others(self):
++        root = self.path("remote")
++        os.makedirs(root)
++        with open(os.path.join(root, "a.txt"), "w") as f:
++            f.write("a")
++        server, url = start_server(root)
++        self.servers.append(server)
++        cfg = self.write_config([{"server": url, "dest": "good"},
++                                 {"server": "http://127.0.0.1:9", "dest": "bad"}])
++        rc = cli.main(["--config", cfg, "--once", "--retries", "1", "--timeout", "1"])
++        self.assertEqual(rc, 1)
++        self.assertTrue(os.path.exists(self.path("good", "a.txt")))
++
++    def test_config_validation(self):
++        bad = [
++            [],
++            [{"server": "http://x"}],
++            [{"server": "http://x", "dest": "a", "typo": 1}],
++            [{"server": "http://x", "dest": "a"}, {"server": "http://y", "dest": "a/b"}],
++            [{"server": "http://x", "dest": "a"}, {"server": "http://y", "dest": "./a"}],
++        ]
++        for folders in bad:
++            with self.assertRaises(cli.ConfigError, msg=folders):
++                cli.load_config(self.write_config(folders))
++        folders = cli.load_config(self.write_config([{"server": "http://x", "dest": "a"}]))
++        self.assertEqual(folders[0].dest, self.path("a"))
++
++
+ class UnitTests(unittest.TestCase):
+     def test_safe_paths(self):
+         for ok in ("a", "a/b.txt", "x..y"):

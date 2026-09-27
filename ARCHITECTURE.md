@@ -42,9 +42,10 @@ mentor review
 |---|---|
 | `benchmark/<project>/repo/` | A small project's source (2 Python, 2 TypeScript). |
 | `benchmark/<project>/labels.yaml` | The answer key: decisions that should be found, their priority, and sample good/partial/wrong answers. Priorities are human-decided. |
-| `evals/run.py` | Runs `analyze()` on every project (several runs each, in parallel) and scores it. |
+| `benchmark/<project>/changes/<name>/` | A follow-up change to the project (`change.patch`) and the decisions *in that change* (`labels.yaml`). Evaluated with `--suite change`, which reviews only the change — like real use. |
+| `evals/run.py` | Runs `analyze()` on every project (several runs each, in parallel) and scores it. `--suite whole` reviews whole repos; `--suite change` reviews only each follow-up change. |
 | `evals/judge.py` | AI judge: matches predictions to labels and rates question quality. |
-| `evals/benchmark.py` | Loads projects and copies each into a throwaway git repo. |
+| `evals/benchmark.py` | Loads benchmark cases and copies each into a throwaway git repo (change cases get the patch as a second commit); `--check` validates every label's `path:line`. |
 | `evals/compare.py` | Before/after table between two eval runs. |
 | `evals/grader_replay.py` | Re-tests only the grader, on saved answer keys (like-for-like). |
 | `evals/rate.py` | A human rates questions, to check whether the AI judge can be trusted. |

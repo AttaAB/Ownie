@@ -3,6 +3,7 @@
   python -m evals.run                      # all projects, 3 runs, config "baseline"
   python -m evals.run --config repo-map --runs 5
   python -m evals.run --projects link-shortener --runs 1
+  python -m evals.run --suite change        # review only each project's follow-up change
 
 Writes one JSON line per (project, run) to evals/results/ and prints a
 summary. Compare two result files with `python -m evals.compare`.
@@ -23,7 +24,8 @@ from rich.table import Table
 
 from mentor.llm import ensure_api_key, grade_answer, model_name
 from mentor.pipeline import analyze
-from mentor.scope import _whole_repo
+from mentor import git
+from mentor.scope import _diff_scope, _whole_repo
 from evals.benchmark import load_projects, project_repo
 from evals.judge import judge_model, match_decisions, score_questions
 
@@ -54,23 +56,26 @@ def main():
   parser.add_argument("--config", default="baseline", help="name recorded with the results")
   parser.add_argument("--runs", type=int, default=3, help="runs per project (LLM output varies)")
   parser.add_argument("--projects", help="comma-separated subset of projects")
+  parser.add_argument("--suite", choices=["whole", "change"], default="whole",
+                      help="whole: review whole repos; change: review only each follow-up change")
   parser.add_argument("--grader-runs", type=int, default=1, help="runs that also test the grader (costly)")
   parser.add_argument("--jobs", type=int, default=4, help="runs evaluated in parallel (default 4)")
   args = parser.parse_args()
 
   ensure_api_key()
-  projects = load_projects(args.projects.split(",") if args.projects else None)
+  projects = load_projects(args.projects.split(",") if args.projects else None, suite=args.suite)
   RESULTS_DIR.mkdir(exist_ok=True)
   out_path = RESULTS_DIR / f"{datetime.now():%Y-%m-%d-%H%M}-{args.config}.jsonl"
   meta = {
     "config": args.config,
+    "suite": args.suite,
     "model": model_name(),
     "judge_model": judge_model() or model_name(),
     "mentor_commit": _mentor_commit(),
   }
 
   jobs = [(project, run) for project in projects for run in range(1, args.runs + 1)]
-  console.print(f"[bold]Eval[/] {args.config} · {len(projects)} project(s) × {args.runs} run(s) · "
+  console.print(f"[bold]Eval[/] {args.config} ({args.suite}) · {len(projects)} project(s) × {args.runs} run(s) · "
                 f"{args.jobs} in parallel · model {meta['model']}")
 
   # Separate processes, not threads: each run chdirs into its own temp repo,
@@ -86,7 +91,7 @@ def main():
         out.write(json.dumps(row) + "\n")
         out.flush()
         rows.append(row)
-        console.print(f"  {project.project} run {run}: " + _inline(row["metrics"]))
+        console.print(f"  {project.name} run {run}: " + _inline(row["metrics"]))
         status.update(f"{len(rows)}/{len(jobs)} runs done…")
 
   rows.sort(key=lambda r: (r["project"], r["run"]))
@@ -99,7 +104,7 @@ def evaluate(project, run, test_grader):
   with project_repo(project) as repo:
     os.chdir(repo)
     try:
-      analysis = analyze(_whole_repo())
+      analysis = analyze(_change_scope() if project.change else _whole_repo())
     finally:
       os.chdir(cwd)
 
@@ -117,7 +122,7 @@ def evaluate(project, run, test_grader):
   metrics["seconds"] = round(time.time() - started, 1)
 
   return {
-    "project": project.project,
+    "project": project.name,
     "verified": project.verified,
     "run": run,
     "metrics": metrics,
@@ -132,6 +137,11 @@ def evaluate(project, run, test_grader):
     "quality": [q.model_dump() for q in quality],
     "grader": grader,
   }
+
+
+def _change_scope():
+  """The last commit only — what `mentor review` covers after one change."""
+  return _diff_scope(git.git("rev-parse", "HEAD~1").strip(), "last commit")
 
 
 def run_grader(labels, predicted, matches):

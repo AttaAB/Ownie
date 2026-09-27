@@ -1,0 +1,141 @@
+# Ground-truth design decisions in the custom-alias-expiry change.
+# Field meanings: see ../../labels.yaml. Locations cite the code AFTER the
+# change; each `location` must fall on lines the change touched
+# (checked by `python -m evals.benchmark --check`).
+#
+# Provenance: written by a fresh Claude Code agent given only the feature
+# request below and the project folder — no knowledge of mentor, the
+# benchmark, or the labels; no design steering.
+#   "Let users pick a custom alias for their short link instead of a random
+#    code, and let them set an optional expiry date after which the link
+#    stops working. Keep it simple and get it working."
+# Labels drafted by AI; priorities are suggestions until the developer
+# verifies them.
+
+project: link-shortener
+change: custom-alias-expiry
+language: python
+verified: false
+
+decisions:
+  - id: alias-check-then-insert
+    title: Alias uniqueness is a SELECT before the INSERT, with no UNIQUE constraint
+    location: app/links.py:44-46
+    also_at: [app/links.py:61-64, app/db.py:4]
+    category: correctness
+    priority: must-find
+    key_point: >
+      Checking the alias and inserting it are separate steps and links.code
+      has no UNIQUE constraint, so two concurrent requests for the same alias
+      can both pass the check and both insert. Both callers get the alias,
+      but resolve_link returns whichever row SQLite finds first — one user's
+      short link silently points at the other user's URL.
+    answers:
+      good: >
+        The code checks whether the alias exists and then inserts it as two
+        separate steps, and there's no unique constraint on code. If two
+        people claim the same alias at the same moment, both inserts succeed,
+        both get told the alias is theirs, and the redirect only ever returns
+        one of the two URLs.
+      partial: >
+        It checks if the alias is already taken and returns 409 if it is.
+      wrong: >
+        The database rejects duplicate aliases, so the second request gets
+        a 409 even if they arrive at the same time.
+
+  - id: expiry-checked-on-redirect
+    title: Expiry is checked at redirect time; expired links stay in the table and keep their alias
+    location: app/links.py:69-76
+    also_at: [app/main.py:42-44, app/links.py:44-45]
+    category: correctness
+    priority: must-find
+    key_point: >
+      Nothing deletes expired links: each redirect compares expires_at with
+      the current time and returns 410 Gone. Because the row stays, an
+      expired alias counts as taken forever (_code_exists doesn't look at
+      expiry), so nobody — including the original owner — can ever reuse it,
+      and expired rows accumulate. Clicks on expired links aren't recorded.
+    answers:
+      good: >
+        Expired links aren't deleted — the redirect checks the expiry each
+        time and returns 410. But since the row is still there, the alias
+        stays "in use" forever, so no one can claim that alias again after
+        it expires, and old links pile up in the table.
+      partial: >
+        Once the expiry date passes the link stops working and returns 410.
+      wrong: >
+        Expired links are deleted, so the alias becomes available again
+        after the expiry date.
+
+  - id: naive-expiry-as-utc
+    title: An expiry without a timezone is treated as UTC
+    location: app/links.py:30-34
+    also_at: [app/links.py:53-59, app/main.py:24]
+    category: correctness
+    priority: nice-to-find
+    key_point: >
+      expires_at is compared with datetime.utcnow(), and an input without a
+      timezone offset is kept as-is, i.e. interpreted as UTC. A user who
+      sends a local time like 2026-10-01T09:00 gets a link that expires hours
+      early or late depending on their timezone; only inputs with an explicit
+      offset are converted correctly.
+    answers:
+      good: >
+        Times are stored and compared as naive UTC. If the client sends an
+        expiry with an offset it's converted, but a plain local time without
+        one is assumed to already be UTC — so someone in New York sending
+        "9:00" gets a link that expires at 5am their time.
+      partial: >
+        The expiry is converted to UTC before it's saved.
+      wrong: >
+        The expiry is interpreted in the server's local timezone, so it's
+        always correct for users in the same timezone as the server.
+
+  - id: reserved-alias-list
+    title: Aliases that collide with app routes are blocked by a hard-coded list
+    location: app/links.py:10-11
+    also_at: [app/links.py:39, app/main.py:37]
+    category: maintainability
+    priority: nice-to-find
+    key_point: >
+      Fixed routes like /health win over /{code}, so an alias with the same
+      name could be created but never resolve; RESERVED_ALIASES blocks those
+      names. The list is maintained by hand, so adding a new route (e.g.
+      /stats) without updating it lets users create unreachable aliases — and
+      any existing alias with that name silently stops working.
+    answers:
+      good: >
+        The /{code} route is matched after the fixed routes, so an alias
+        called "health" would never redirect — that's why those names are
+        reserved. But the list is hard-coded, so if someone adds a new route
+        and forgets to update it, aliases with that name break, including
+        ones people already created.
+      partial: >
+        Some aliases like "health" and "docs" are reserved.
+      wrong: >
+        Reserved names are blocked for security, so users can't overwrite
+        the app's own pages with a redirect.
+
+  - id: migration-at-import
+    title: The expires_at column is added by an ALTER TABLE at import time
+    location: app/db.py:7-11
+    category: reliability
+    priority: nice-to-find
+    key_point: >
+      The schema change runs whenever app.db is imported, with a check-then-
+      alter on PRAGMA table_info. It's convenient for a single process, but
+      with several workers starting at once against an old database, two can
+      both see the column missing and the second ALTER fails with "duplicate
+      column", crashing that worker on startup. There's no migration history
+      or way to roll back.
+    answers:
+      good: >
+        On startup it checks whether expires_at exists and adds it if not.
+        That's fine for one process, but if several workers start at the same
+        time on an old database, they can all try to add the column and the
+        later ones crash with a duplicate-column error.
+      partial: >
+        It adds the new column automatically to older databases.
+      wrong: >
+        The whole table is recreated on startup so it always has the latest
+        columns.

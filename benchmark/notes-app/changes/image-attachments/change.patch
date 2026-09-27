@@ -1,0 +1,373 @@
+diff --git a/app/components/ImageUploadForm.tsx b/app/components/ImageUploadForm.tsx
+new file mode 100644
+index 0000000..064d829
+--- /dev/null
++++ b/app/components/ImageUploadForm.tsx
+@@ -0,0 +1,26 @@
++"use client";
++
++import { useActionState } from "react";
++import type { ImageFormState } from "@/app/notes/actions";
++
++type Props = {
++  action: (prev: ImageFormState, formData: FormData) => Promise<ImageFormState>;
++  noteId: number;
++};
++
++export default function ImageUploadForm({ action, noteId }: Props) {
++  const [state, formAction, pending] = useActionState(action, {});
++  return (
++    <form action={formAction} className="stack">
++      <input type="hidden" name="id" value={noteId} />
++      <label>
++        Add images (PNG, JPEG, GIF or WebP, up to 5 MB each)
++        <input type="file" name="images" accept="image/png,image/jpeg,image/gif,image/webp" multiple required />
++      </label>
++      {state.error && <p className="error" role="alert">{state.error}</p>}
++      <div className="row">
++        <button type="submit" className="secondary" disabled={pending}>{pending ? "Uploading..." : "Upload"}</button>
++      </div>
++    </form>
++  );
++}
+diff --git a/app/globals.css b/app/globals.css
+index 58a31bd..7b10dba 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -25,3 +25,6 @@ button.secondary, .button.secondary { background: #fff; color: #2456c7; }
+ button.danger { background: #fff; color: #b3261e; border-color: #b3261e; }
+ .auth { max-width: 380px; margin: 60px auto; }
+ .note-body { white-space: pre-wrap; word-wrap: break-word; }
++.note-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin: 12px 0; }
++.note-images figure { margin: 0; display: flex; flex-direction: column; gap: 6px; }
++.note-images img { display: block; width: 100%; height: 160px; object-fit: cover; border-radius: 6px; border: 1px solid #e2e2de; background: #f6f6f4; }
+diff --git a/app/notes/[id]/images/[imageId]/route.ts b/app/notes/[id]/images/[imageId]/route.ts
+new file mode 100644
+index 0000000..9d8b8ed
+--- /dev/null
++++ b/app/notes/[id]/images/[imageId]/route.ts
+@@ -0,0 +1,14 @@
++import { getCurrentUser } from "@/lib/auth";
++import { getOwnedImage, imageResponse } from "@/lib/images";
++
++type Ctx = { params: Promise<{ id: string; imageId: string }> };
++
++// Serves an image to the note's owner only.
++export async function GET(_req: Request, { params }: Ctx) {
++  const user = await getCurrentUser();
++  const { id, imageId } = await params;
++  const noteId = Number(id);
++  const imgId = Number(imageId);
++  if (!user || !Number.isInteger(noteId) || !Number.isInteger(imgId)) return imageResponse(null);
++  return imageResponse(getOwnedImage(user.id, noteId, imgId));
++}
+diff --git a/app/notes/[id]/page.tsx b/app/notes/[id]/page.tsx
+index 8be181e..ff649d5 100644
+--- a/app/notes/[id]/page.tsx
++++ b/app/notes/[id]/page.tsx
+@@ -1,9 +1,17 @@
+ import { headers } from "next/headers";
+ import { notFound } from "next/navigation";
+ import Header from "@/app/components/Header";
++import ImageUploadForm from "@/app/components/ImageUploadForm";
+ import NoteForm from "@/app/components/NoteForm";
+-import { deleteNoteAction, setSharingAction, updateNoteAction } from "@/app/notes/actions";
++import {
++  deleteImageAction,
++  deleteNoteAction,
++  setSharingAction,
++  updateNoteAction,
++  uploadImagesAction,
++} from "@/app/notes/actions";
+ import { requireUser } from "@/lib/auth";
++import { listImageIds } from "@/lib/images";
+ import { getNote } from "@/lib/notes";
+ 
+ type Props = { params: Promise<{ id: string }> };
+@@ -21,6 +29,7 @@ export default async function EditNotePage({ params }: Props) {
+   const id = Number((await params).id);
+   const note = Number.isInteger(id) ? getNote(user.id, id) : null;
+   if (!note) notFound();
++  const imageIds = listImageIds(note.id);
+   const shareUrl = note.shareToken ? `${await baseUrl()}/s/${note.shareToken}` : null;
+ 
+   return (
+@@ -29,6 +38,30 @@ export default async function EditNotePage({ params }: Props) {
+       <h2>Edit note</h2>
+       <NoteForm key={note.updatedAt} action={updateNoteAction} note={note} submitLabel="Save" />
+ 
++      <section className="card stack">
++        <h2>Images</h2>
++        {imageIds.length > 0 ? (
++          <div className="note-images">
++            {imageIds.map((imageId) => (
++              <figure key={imageId}>
++                <a href={`/notes/${note.id}/images/${imageId}`} target="_blank" rel="noreferrer">
++                  {/* eslint-disable-next-line @next/next/no-img-element */}
++                  <img src={`/notes/${note.id}/images/${imageId}`} alt="" loading="lazy" />
++                </a>
++                <form action={deleteImageAction}>
++                  <input type="hidden" name="id" value={note.id} />
++                  <input type="hidden" name="imageId" value={imageId} />
++                  <button type="submit" className="danger">Remove</button>
++                </form>
++              </figure>
++            ))}
++          </div>
++        ) : (
++          <p className="muted">No images yet.</p>
++        )}
++        <ImageUploadForm key={imageIds.join(",")} action={uploadImagesAction} noteId={note.id} />
++      </section>
++
+       <section className="card">
+         <h2>Sharing</h2>
+         {shareUrl ? (
+diff --git a/app/notes/actions.ts b/app/notes/actions.ts
+index 08972c1..414d74e 100644
+--- a/app/notes/actions.ts
++++ b/app/notes/actions.ts
+@@ -3,6 +3,7 @@
+ import { revalidatePath } from "next/cache";
+ import { redirect } from "next/navigation";
+ import { requireUser } from "@/lib/auth";
++import * as images from "@/lib/images";
+ import * as notes from "@/lib/notes";
+ 
+ export type NoteFormState = { error?: string };
+@@ -60,3 +61,26 @@ export async function setSharingAction(formData: FormData): Promise<void> {
+   notes.setSharing(user.id, id, formData.get("enabled") === "true");
+   revalidatePath(`/notes/${id}`);
+ }
++
++export type ImageFormState = { error?: string };
++
++export async function uploadImagesAction(_prev: ImageFormState, formData: FormData): Promise<ImageFormState> {
++  const user = await requireUser();
++  const id = readId(formData);
++  const files = formData.getAll("images").filter((f): f is File => f instanceof File && f.size > 0);
++  if (files.length === 0) return { error: "Choose at least one image." };
++  if (files.some((f) => f.size > images.MAX_IMAGE_BYTES)) return { error: "Each image must be 5 MB or smaller." };
++  const loaded = await Promise.all(files.map(async (f) => ({ bytes: new Uint8Array(await f.arrayBuffer()) })));
++  const result = images.addImages(user.id, id, loaded);
++  if (result.error) return result;
++  revalidatePath(`/notes/${id}`);
++  return {};
++}
++
++export async function deleteImageAction(formData: FormData): Promise<void> {
++  const user = await requireUser();
++  const id = readId(formData);
++  const imageId = Number(formData.get("imageId"));
++  if (Number.isInteger(imageId)) images.deleteImage(user.id, id, imageId);
++  revalidatePath(`/notes/${id}`);
++}
+diff --git a/app/s/[token]/images/[imageId]/route.ts b/app/s/[token]/images/[imageId]/route.ts
+new file mode 100644
+index 0000000..9b0f29e
+--- /dev/null
++++ b/app/s/[token]/images/[imageId]/route.ts
+@@ -0,0 +1,11 @@
++import { getSharedImage, imageResponse } from "@/lib/images";
++
++type Ctx = { params: Promise<{ token: string; imageId: string }> };
++
++// Serves an image from a shared note, only while the note's share link is active.
++export async function GET(_req: Request, { params }: Ctx) {
++  const { token, imageId } = await params;
++  const imgId = Number(imageId);
++  if (!Number.isInteger(imgId)) return imageResponse(null);
++  return imageResponse(getSharedImage(token, imgId));
++}
+diff --git a/app/s/[token]/page.tsx b/app/s/[token]/page.tsx
+index c58c2da..4aaf4b8 100644
+--- a/app/s/[token]/page.tsx
++++ b/app/s/[token]/page.tsx
+@@ -1,5 +1,6 @@
+ import type { Metadata } from "next";
+ import { notFound } from "next/navigation";
++import { listImageIds } from "@/lib/images";
+ import { getSharedNote } from "@/lib/notes";
+ 
+ type Props = { params: Promise<{ token: string }> };
+@@ -10,12 +11,25 @@ export default async function SharedNotePage({ params }: Props) {
+   const { token } = await params;
+   const note = getSharedNote(token);
+   if (!note) notFound();
++  const imageIds = listImageIds(note.id);
+   return (
+     <main className="container">
+       <article className="card">
+         <h1 style={{ marginTop: 0 }}>{note.title}</h1>
+         <p className="muted">Last updated {new Date(note.updatedAt).toLocaleString()}</p>
+         <div className="note-body">{note.body}</div>
++        {imageIds.length > 0 && (
++          <div className="note-images">
++            {imageIds.map((imageId) => (
++              <figure key={imageId}>
++                <a href={`/s/${token}/images/${imageId}`} target="_blank" rel="noreferrer">
++                  {/* eslint-disable-next-line @next/next/no-img-element */}
++                  <img src={`/s/${token}/images/${imageId}`} alt="" loading="lazy" />
++                </a>
++              </figure>
++            ))}
++          </div>
++        )}
+         {note.tags.length > 0 && <p>{note.tags.map((t) => <span key={t} className="tag">{t}</span>)}</p>}
+       </article>
+       <p className="muted">Shared read-only note.</p>
+diff --git a/lib/db.ts b/lib/db.ts
+index f4e3c74..a0566ac 100644
+--- a/lib/db.ts
++++ b/lib/db.ts
+@@ -43,6 +43,15 @@ function open(): Database.Database {
+       PRIMARY KEY (note_id, tag)
+     );
+     CREATE INDEX IF NOT EXISTS note_tags_tag_idx ON note_tags(tag);
++
++    CREATE TABLE IF NOT EXISTS note_images (
++      id         INTEGER PRIMARY KEY AUTOINCREMENT,
++      note_id    INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
++      mime_type  TEXT NOT NULL,
++      data       BLOB NOT NULL,
++      created_at INTEGER NOT NULL
++    );
++    CREATE INDEX IF NOT EXISTS note_images_note_idx ON note_images(note_id, id);
+   `);
+   return db;
+ }
+diff --git a/lib/images.ts b/lib/images.ts
+new file mode 100644
+index 0000000..afb3065
+--- /dev/null
++++ b/lib/images.ts
+@@ -0,0 +1,113 @@
++import "server-only";
++import { getDb } from "./db";
++
++// Images are stored as BLOBs in SQLite so they live (and get backed up and
++// deleted) together with their note.
++
++export const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB per image
++export const MAX_IMAGES_PER_NOTE = 20;
++
++/**
++ * Detects the image type from the file's first bytes rather than trusting the
++ * browser-supplied type. Only raster formats are allowed: SVG can carry
++ * scripts, so it is rejected.
++ */
++export function sniffImageType(bytes: Uint8Array): string | null {
++  const starts = (sig: number[], offset = 0) => sig.every((b, i) => bytes[offset + i] === b);
++  if (starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
++  if (starts([0xff, 0xd8, 0xff])) return "image/jpeg";
++  if (starts([0x47, 0x49, 0x46, 0x38])) return "image/gif";
++  if (starts([0x52, 0x49, 0x46, 0x46]) && starts([0x57, 0x45, 0x42, 0x50], 8)) return "image/webp";
++  return null;
++}
++
++/** Image ids for a note, oldest first. Callers must already have checked access to the note. */
++export function listImageIds(noteId: number): number[] {
++  const rows = getDb().prepare("SELECT id FROM note_images WHERE note_id = ? ORDER BY id").all(noteId) as {
++    id: number;
++  }[];
++  return rows.map((r) => r.id);
++}
++
++export type AddImagesResult = { error?: string };
++
++/** Adds images to a note the user owns. All-or-nothing: nothing is saved if any file is invalid. */
++export function addImages(userId: number, noteId: number, files: { bytes: Uint8Array }[]): AddImagesResult {
++  const db = getDb();
++  const owned = db.prepare("SELECT 1 FROM notes WHERE id = ? AND user_id = ?").get(noteId, userId);
++  if (!owned) return { error: "Note not found." };
++
++  const prepared: { mime: string; bytes: Uint8Array }[] = [];
++  for (const f of files) {
++    if (f.bytes.byteLength > MAX_IMAGE_BYTES) return { error: "Each image must be 5 MB or smaller." };
++    const mime = sniffImageType(f.bytes);
++    if (!mime) return { error: "Only PNG, JPEG, GIF and WebP images are supported." };
++    prepared.push({ mime, bytes: f.bytes });
++  }
++
++  return db.transaction((): AddImagesResult => {
++    const { count } = db.prepare("SELECT COUNT(*) AS count FROM note_images WHERE note_id = ?").get(noteId) as {
++      count: number;
++    };
++    if (count + prepared.length > MAX_IMAGES_PER_NOTE) {
++      return { error: `A note can have at most ${MAX_IMAGES_PER_NOTE} images.` };
++    }
++    const now = Date.now();
++    const insert = db.prepare("INSERT INTO note_images (note_id, mime_type, data, created_at) VALUES (?, ?, ?, ?)");
++    for (const p of prepared) insert.run(noteId, p.mime, Buffer.from(p.bytes), now);
++    return {};
++  })();
++}
++
++// Note: adding/removing images deliberately doesn't touch notes.updated_at —
++// the edit form is keyed on it, so bumping it would wipe unsaved text edits.
++export function deleteImage(userId: number, noteId: number, imageId: number): boolean {
++  return (
++    getDb()
++      .prepare(
++        `DELETE FROM note_images WHERE id = ? AND note_id = ?
++         AND note_id IN (SELECT id FROM notes WHERE user_id = ?)`,
++      )
++      .run(imageId, noteId, userId).changes > 0
++  );
++}
++
++type ImageData = { mimeType: string; data: Buffer };
++
++/** An image from a note the user owns. */
++export function getOwnedImage(userId: number, noteId: number, imageId: number): ImageData | null {
++  const row = getDb()
++    .prepare(
++      `SELECT i.mime_type AS mimeType, i.data FROM note_images i JOIN notes n ON n.id = i.note_id
++       WHERE i.id = ? AND i.note_id = ? AND n.user_id = ?`,
++    )
++    .get(imageId, noteId, userId) as ImageData | undefined;
++  return row ?? null;
++}
++
++/** An image from a note that is currently shared with this token. */
++export function getSharedImage(token: string, imageId: number): ImageData | null {
++  const row = getDb()
++    .prepare(
++      `SELECT i.mime_type AS mimeType, i.data FROM note_images i JOIN notes n ON n.id = i.note_id
++       WHERE i.id = ? AND n.share_token = ?`,
++    )
++    .get(imageId, token) as ImageData | undefined;
++  return row ?? null;
++}
++
++/** Builds the HTTP response for an image, locked down so it can only ever render as an image. */
++export function imageResponse(image: ImageData | null): Response {
++  if (!image) return new Response("Not found", { status: 404 });
++  return new Response(new Uint8Array(image.data), {
++    headers: {
++      "Content-Type": image.mimeType,
++      "Content-Length": String(image.data.byteLength),
++      "X-Content-Type-Options": "nosniff",
++      "Content-Security-Policy": "default-src 'none'; sandbox",
++      // private + no-cache: revalidate every time so revoking a share link
++      // (or deleting an image) takes effect immediately.
++      "Cache-Control": "private, no-cache",
++    },
++  });
++}
+diff --git a/next.config.ts b/next.config.ts
+index 3f32be3..093044d 100644
+--- a/next.config.ts
++++ b/next.config.ts
+@@ -3,6 +3,11 @@ import type { NextConfig } from "next";
+ const nextConfig: NextConfig = {
+   // better-sqlite3 is a native module; keep it out of the server bundle.
+   serverExternalPackages: ["better-sqlite3"],
++  experimental: {
++    // Server actions default to a 1 MB body limit; image uploads need more.
++    // Per-image size is enforced separately in lib/images.ts.
++    serverActions: { bodySizeLimit: "25mb" },
++  },
+ };
+ 
+ export default nextConfig;

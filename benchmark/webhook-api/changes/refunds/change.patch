@@ -1,0 +1,342 @@
+diff --git a/README.md b/README.md
+index e33ed27..eb3534c 100644
+--- a/README.md
++++ b/README.md
+@@ -19,12 +19,16 @@ With `SMTP_URL` empty, emails are printed to the server console.
+ 
+ `send-webhook` options: `--event <id>` (send the same id twice to see dedupe),
+ `--customer`, `--email`, `--amount` (minor units), `--currency`, `--bad-signature`, `--url`.
++To refund a payment: `npm run send-webhook -- --refund <pi_id>` (add
++`--amount <total refunded> --partial` for a partial refund).
+ 
+ ## Endpoints
+ 
+ - `POST /webhooks/payments` - requires a valid `Stripe-Signature` header
+   (`t=<ts>,v1=<hmac-sha256 of "<ts>.<raw body>">`, 5 minute tolerance).
++  Handles `payment_intent.succeeded` and `charge.refunded`.
+   Returns 200 for new and duplicate events; other event types are acknowledged and ignored.
++  A refund for a payment we haven't recorded returns 409 (and isn't recorded) so the provider retries it.
+ - `GET /customers/:customerId/payments?limit=20&before=<id>` - requires
+   `Authorization: Bearer $API_TOKEN`. Newest first; pass `nextBefore` as `before` for the next page.
+ - `GET /health`
+@@ -37,3 +41,8 @@ With `SMTP_URL` empty, emails are printed to the server console.
+   the `payments` row (`email_status`) and sent after the webhook responds, with
+   retries (up to 5 attempts, every 30s), so a mail outage never fails or delays the webhook.
+ - Payments with no customer email are stored with `email_status = 'skipped'`.
++- Refunds (`charge.refunded`) set the payment's `status` to `refunded` or
++  `partially_refunded`, store the cumulative `amount_refunded`, and re-queue the
++  row's email so the worker sends a refund notice instead of a confirmation.
++  A refund total that isn't higher than the stored one (out-of-order or
++  re-sent events) is ignored.
+diff --git a/scripts/send-sample-webhook.ts b/scripts/send-sample-webhook.ts
+index 1cd8016..e89be7c 100644
+--- a/scripts/send-sample-webhook.ts
++++ b/scripts/send-sample-webhook.ts
+@@ -1,8 +1,11 @@
+-// Sends a signed, Stripe-shaped payment_intent.succeeded event to the local server.
++// Sends a signed, Stripe-shaped payment_intent.succeeded (or charge.refunded)
++// event to the local server.
+ //
+ //   npm run send-webhook                     # new random payment
+ //   npm run send-webhook -- --event evt_123  # reuse an event id to test dedupe
+ //   npm run send-webhook -- --bad-signature  # expect a 400
++//   npm run send-webhook -- --refund pi_abc  # fully refund that payment
++//   npm run send-webhook -- --refund pi_abc --amount 1000 --partial
+ import { randomBytes } from "node:crypto";
+ import { signatureHeader } from "../src/signature.js";
+ 
+@@ -26,7 +29,10 @@ if (!secret) {
+ }
+ 
+ const id = () => randomBytes(8).toString("hex");
+-const event = {
++const refundOf = flag("--refund");
++const amount = Number(flag("--amount") ?? 2500);
++
++const paymentEvent = {
+   id: flag("--event") ?? `evt_${id()}`,
+   object: "event",
+   type: "payment_intent.succeeded",
+@@ -35,8 +41,8 @@ const event = {
+     object: {
+       id: flag("--payment") ?? `pi_${id()}`,
+       object: "payment_intent",
+-      amount: Number(flag("--amount") ?? 2500),
+-      amount_received: Number(flag("--amount") ?? 2500),
++      amount,
++      amount_received: amount,
+       currency: flag("--currency") ?? "usd",
+       status: "succeeded",
+       customer: flag("--customer") ?? "cus_demo123",
+@@ -46,6 +52,24 @@ const event = {
+   },
+ };
+ 
++const refundEvent = {
++  id: flag("--event") ?? `evt_${id()}`,
++  object: "event",
++  type: "charge.refunded",
++  created: Math.floor(Date.now() / 1000),
++  data: {
++    object: {
++      id: `ch_${id()}`,
++      object: "charge",
++      payment_intent: refundOf,
++      amount_refunded: amount, // cumulative total refunded
++      refunded: !args.includes("--partial"),
++      currency: flag("--currency") ?? "usd",
++    },
++  },
++};
++
++const event = refundOf ? refundEvent : paymentEvent;
+ const body = JSON.stringify(event);
+ const signature = args.includes("--bad-signature") ? "t=0,v1=deadbeef" : signatureHeader(secret, body);
+ 
+@@ -57,7 +81,8 @@ async function main() {
+   });
+   console.log(`POST ${url} -> ${res.status}`);
+   console.log(await res.text());
+-  console.log(`event=${event.id} payment=${event.data.object.id} customer=${event.data.object.customer}`);
++  if (refundOf) console.log(`event=${event.id} refunded payment=${refundOf}`);
++  else console.log(`event=${event.id} payment=${paymentEvent.data.object.id} customer=${paymentEvent.data.object.customer}`);
+   process.exitCode = res.ok ? 0 : 1;
+ }
+ 
+diff --git a/src/app.ts b/src/app.ts
+index d72d5b6..b52a8f8 100644
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -2,7 +2,7 @@ import express, { type NextFunction, type Request, type Response } from "express
+ import { timingSafeEqual, createHash } from "node:crypto";
+ import { z } from "zod";
+ import type { Config } from "./config.js";
+-import type { Db, NewPayment, PaymentRow } from "./db.js";
++import type { Db, NewPayment, NewRefund, PaymentRow } from "./db.js";
+ import { verifySignature } from "./signature.js";
+ 
+ const eventSchema = z.object({
+@@ -23,6 +23,15 @@ const paymentIntentSchema = z.object({
+   metadata: z.record(z.string(), z.string()).optional(),
+ });
+ 
++// Subset of a Stripe Charge (sent with charge.refunded) that we rely on.
++// amount_refunded is the cumulative total, so partial refunds work too.
++const refundedChargeSchema = z.object({
++  id: z.string().min(1),
++  payment_intent: z.string().min(1),
++  amount_refunded: z.number().int().positive(),
++  refunded: z.boolean(), // true once the charge is fully refunded
++});
++
+ const listQuerySchema = z.object({
+   limit: z.coerce.number().int().min(1).max(100).default(20),
+   before: z.coerce.number().int().positive().optional(),
+@@ -45,6 +54,17 @@ function toPayment(eventId: string, object: unknown): NewPayment | { error: stri
+   };
+ }
+ 
++function toRefund(object: unknown): NewRefund | { error: string } {
++  const parsed = refundedChargeSchema.safeParse(object);
++  if (!parsed.success) return { error: `invalid refunded charge: ${parsed.error.message}` };
++  const charge = parsed.data;
++  return {
++    providerPaymentId: charge.payment_intent,
++    amountRefunded: charge.amount_refunded,
++    fullyRefunded: charge.refunded,
++  };
++}
++
+ function serializePayment(row: PaymentRow) {
+   return {
+     id: row.id,
+@@ -53,6 +73,7 @@ function serializePayment(row: PaymentRow) {
+     amount: row.amount,
+     currency: row.currency,
+     status: row.status,
++    amountRefunded: row.amount_refunded,
+     emailStatus: row.email_status,
+     createdAt: row.created_at,
+   };
+@@ -99,6 +120,25 @@ export function createApp(config: Config, db: Db, onPaymentRecorded: () => void)
+     }
+     const { id: eventId, type } = event.data;
+ 
++    if (type === "charge.refunded") {
++      const refund = toRefund(event.data.data.object);
++      if ("error" in refund) {
++        console.warn(`[webhook] event ${eventId}: ${refund.error}`);
++        res.status(400).json({ error: refund.error });
++        return;
++      }
++      const result = db.recordRefund(eventId, type, refund);
++      if (result === "unknown_payment") {
++        // Not recorded, so the provider retries; the payment event may just not have arrived yet.
++        console.warn(`[webhook] event ${eventId}: refund for unknown payment ${refund.providerPaymentId}`);
++        res.status(409).json({ error: "unknown payment" });
++        return;
++      }
++      res.status(200).json({ received: true, duplicate: result === "duplicate" });
++      if (result === "recorded") onPaymentRecorded();
++      return;
++    }
++
+     let payment: NewPayment | null = null;
+     if (type === "payment_intent.succeeded") {
+       const result = toPayment(eventId, event.data.data.object);
+diff --git a/src/db.ts b/src/db.ts
+index 2e35bea..f5f4b1e 100644
+--- a/src/db.ts
++++ b/src/db.ts
+@@ -11,6 +11,7 @@ export interface PaymentRow {
+   amount: number; // minor units (e.g. cents), never floats
+   currency: string;
+   status: string;
++  amount_refunded: number; // minor units, cumulative total refunded so far
+   email_status: EmailStatus;
+   email_attempts: number;
+   email_last_error: string | null;
+@@ -27,6 +28,14 @@ export interface NewPayment {
+   status: string;
+ }
+ 
++export interface NewRefund {
++  providerPaymentId: string;
++  amountRefunded: number; // cumulative, as the provider reports it
++  fullyRefunded: boolean;
++}
++
++export type RefundResult = "recorded" | "duplicate" | "unknown_payment";
++
+ export const MAX_EMAIL_ATTEMPTS = 5;
+ 
+ export function openDatabase(path: string) {
+@@ -50,6 +59,7 @@ export function openDatabase(path: string) {
+       amount              INTEGER NOT NULL CHECK (amount >= 0),
+       currency            TEXT NOT NULL,
+       status              TEXT NOT NULL,
++      amount_refunded     INTEGER NOT NULL DEFAULT 0 CHECK (amount_refunded >= 0),
+       email_status        TEXT NOT NULL DEFAULT 'pending',
+       email_attempts      INTEGER NOT NULL DEFAULT 0,
+       email_last_error    TEXT,
+@@ -60,6 +70,12 @@ export function openDatabase(path: string) {
+     CREATE INDEX IF NOT EXISTS payments_email_status_idx ON payments (email_status);
+   `);
+ 
++  // Databases created before refunds were supported lack this column.
++  const columns = db.prepare("PRAGMA table_info(payments)").all() as { name: string }[];
++  if (!columns.some((c) => c.name === "amount_refunded")) {
++    db.exec("ALTER TABLE payments ADD COLUMN amount_refunded INTEGER NOT NULL DEFAULT 0 CHECK (amount_refunded >= 0)");
++  }
++
+   // If the process died mid-send, put those rows back in the queue.
+   db.prepare("UPDATE payments SET email_status = 'pending' WHERE email_status = 'sending'").run();
+ 
+@@ -69,6 +85,19 @@ export function openDatabase(path: string) {
+     VALUES (@providerPaymentId, @eventId, @customerId, @customerEmail, @amount, @currency, @status, @emailStatus)
+     ON CONFLICT (provider_payment_id) DO NOTHING
+   `);
++  const paymentExists = db.prepare("SELECT 1 FROM payments WHERE provider_payment_id = ?");
++  // Only move forward: refund events can arrive out of order or be re-sent with
++  // new event ids, so an older/equal refund total is ignored. Re-queues the
++  // email (the worker picks the refund template from the status).
++  const applyRefund = db.prepare(`
++    UPDATE payments
++    SET amount_refunded = @amountRefunded,
++        status = @status,
++        email_status = CASE WHEN customer_email IS NULL THEN 'skipped' ELSE 'pending' END,
++        email_attempts = 0,
++        email_last_error = NULL
++    WHERE provider_payment_id = @providerPaymentId AND amount_refunded < @amountRefunded
++  `);
+ 
+   return {
+     raw: db,
+@@ -85,6 +114,25 @@ export function openDatabase(path: string) {
+       return true;
+     }),
+ 
++    /**
++     * Records a refund event and updates the payment atomically. If the payment
++     * is not known yet (providers don't guarantee event order), nothing is
++     * recorded so the provider's retry can apply it later.
++     */
++    recordRefund: db.transaction((eventId: string, type: string, refund: NewRefund): RefundResult => {
++      if (!paymentExists.get(refund.providerPaymentId)) {
++        const seen = db.prepare("SELECT 1 FROM webhook_events WHERE event_id = ?").get(eventId);
++        return seen ? "duplicate" : "unknown_payment";
++      }
++      if (insertEvent.run(eventId, type).changes === 0) return "duplicate";
++      applyRefund.run({
++        providerPaymentId: refund.providerPaymentId,
++        amountRefunded: refund.amountRefunded,
++        status: refund.fullyRefunded ? "refunded" : "partially_refunded",
++      });
++      return "recorded";
++    }),
++
+     listCustomerPayments(customerId: string, limit: number, beforeId?: number): PaymentRow[] {
+       return db
+         .prepare(
+@@ -110,12 +158,14 @@ export function openDatabase(path: string) {
+         .all(MAX_EMAIL_ATTEMPTS, limit) as PaymentRow[];
+     },
+ 
++    // Both marks only apply while the row is still 'sending': if a refund
++    // re-queued it mid-send, the refund email must stay pending.
+     markEmailSent(id: number): void {
+-      db.prepare("UPDATE payments SET email_status = 'sent', email_last_error = NULL WHERE id = ?").run(id);
++      db.prepare("UPDATE payments SET email_status = 'sent', email_last_error = NULL WHERE id = ? AND email_status = 'sending'").run(id);
+     },
+ 
+     markEmailFailed(id: number, error: string): void {
+-      db.prepare("UPDATE payments SET email_status = 'failed', email_last_error = ? WHERE id = ?").run(error, id);
++      db.prepare("UPDATE payments SET email_status = 'failed', email_last_error = ? WHERE id = ? AND email_status = 'sending'").run(error, id);
+     },
+ 
+     close(): void {
+diff --git a/src/email.ts b/src/email.ts
+index 3e5aa94..6dbceab 100644
+--- a/src/email.ts
++++ b/src/email.ts
+@@ -46,8 +46,30 @@ function confirmationEmail(payment: PaymentRow) {
+   };
+ }
+ 
++function refundEmail(payment: PaymentRow) {
++  const refunded = formatAmount(payment.amount_refunded, payment.currency);
++  const original = formatAmount(payment.amount, payment.currency);
++  const full = payment.status === "refunded";
++  return {
++    subject: full ? `Refund issued: ${refunded}` : `Partial refund issued: ${refunded}`,
++    text: [
++      full ? "Your payment has been refunded." : "Part of your payment has been refunded.",
++      "",
++      `Refunded: ${refunded} (of ${original})`,
++      `Reference: ${payment.provider_payment_id}`,
++      "",
++      "It can take 5-10 business days for the refund to appear on your statement.",
++    ].join("\n"),
++  };
++}
++
++/** Picks the email for the payment's current state (a refund re-queues the row). */
++function emailFor(payment: PaymentRow) {
++  return payment.amount_refunded > 0 ? refundEmail(payment) : confirmationEmail(payment);
++}
++
+ /**
+- * Sends confirmation emails for payments that still need one. Emails are
++ * Sends confirmation (or refund) emails for payments that still need one. Emails are
+  * queued in the payments table (email_status) rather than sent inline, so a
+  * slow or failing mail server never makes the webhook fail and a crash
+  * between "payment saved" and "email sent" is retried instead of lost.
+@@ -55,7 +77,7 @@ function confirmationEmail(payment: PaymentRow) {
+ export async function deliverPendingEmails(db: Db, mailer: Mailer, batchSize = 20): Promise<number> {
+   let sent = 0;
+   for (const payment of db.claimPendingEmails(batchSize)) {
+-    const { subject, text } = confirmationEmail(payment);
++    const { subject, text } = emailFor(payment);
+     try {
+       await mailer.send(payment.customer_email!, subject, text);
+       db.markEmailSent(payment.id);

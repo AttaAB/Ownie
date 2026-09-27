@@ -32,7 +32,8 @@ def main():
 
   ensure_api_key()
   path = resolve(args.results)
-  labels = {p.project: {d.id: d for d in p.decisions} for p in load_projects()}
+  projects = load_projects(suite="whole") + load_projects(suite="change")
+  labels = {p.name: {d.id: d for d in p.decisions} for p in projects}
 
   jobs = []
   for row in load(path):

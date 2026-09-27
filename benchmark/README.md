@@ -10,7 +10,17 @@ benchmark/
   <project>/
     repo/          the project's source (plain files; no .git, no node_modules)
     labels.yaml    ground-truth decisions + sample answers (see link-shortener/)
+    changes/
+      <name>/
+        change.patch   a follow-up change to repo/ (git diff, new files included)
+        labels.yaml    decisions made *in that change*; locations cite the
+                       code after the change, on lines the change touched
 ```
+
+Two suites: `python -m evals.run` reviews each whole repo;
+`python -m evals.run --suite change` commits the repo, applies the patch
+as a second commit, and reviews only that commit — the way `mentor review`
+is used after someone (or an AI) makes a change.
 
 | Project | Language | Built by | Labels |
 |---|---|---|---|
@@ -18,6 +28,13 @@ benchmark/
 | notes-app | TypeScript / Next.js | fresh agent, prompt below | 8 (3 must-find) |
 | sync-cli | Python | fresh agent, prompt below | 8 (4 must-find) |
 | webhook-api | TypeScript / Express | fresh agent, prompt below | 9 (4 must-find) |
+
+| Change | Feature request (the agent's only instructions) | Labels |
+|---|---|---|
+| link-shortener/custom-alias-expiry | custom alias + optional expiry date | 5 (2 must-find) |
+| notes-app/image-attachments | attach images; show them on the shared page | 5 (2 must-find) |
+| sync-cli/multi-folder-sync | several folders from a config file, in parallel | 5 (2 must-find) |
+| webhook-api/refunds | refund webhook → update status, email the customer | 4 (2 must-find) |
 
 Labels are AI-drafted and fact-checked against the code (every
 `path:line` validated); **priorities are the developer's call** — a
@@ -52,6 +69,20 @@ steering the design* — so build these the way a vibe coder would.
    ```
 5. Tell Claude (in the engineering-mentor session) the project is in; it
    drafts `labels.yaml`, and you review it (below).
+
+## How to add a change
+
+Same rule — no steering. Copy the project's `repo/` into a fresh git repo
+outside this one (one "base" commit), give a fresh agent only a one-line
+feature request ending "Keep it simple and get it working.", then save the
+result with new files included:
+
+```bash
+git add -A && git diff --cached --binary > benchmark/<project>/changes/<name>/change.patch
+```
+
+Draft `labels.yaml` next to it (the request goes in its header), then run
+`python -m evals.benchmark --check`.
 
 ## Prompts
 
@@ -93,5 +124,7 @@ benchmark just measures its own opinions. For each decision in
 - **Answers realistic?** `good` / `partial` / `wrong` should sound like
   things a real developer would say.
 
-Then set `verified: true` at the top. Unverified projects still run but
+Then set `verified: true` at the top. Change cases are reviewed the same
+way; their must-finds should be what you'd expect the author of *that
+change* to explain in its code review. Unverified projects still run but
 are flagged in results.

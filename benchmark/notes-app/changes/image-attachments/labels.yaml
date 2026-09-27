@@ -1,0 +1,144 @@
+# Ground-truth design decisions in the image-attachments change.
+# Field meanings: see ../../../link-shortener/labels.yaml. Locations cite
+# the code AFTER the change; each `location` must fall on lines the change
+# touched (checked by `python -m evals.benchmark --check`).
+#
+# Provenance: written by a fresh Claude Code agent given only the feature
+# request below and the project folder — no knowledge of mentor, the
+# benchmark, or the labels; no design steering. Not typechecked (no
+# node_modules in the benchmark copy).
+#   "Let users attach images to their notes: upload them, show them in the
+#    note, and on the note's public shared page. Keep it simple and get it
+#    working."
+# Labels drafted by AI; priorities are suggestions until the developer
+# verifies them.
+
+project: notes-app
+change: image-attachments
+language: typescript
+verified: false
+
+decisions:
+  - id: images-as-sqlite-blobs
+    title: Images are stored as BLOBs in the SQLite database
+    location: lib/db.ts:47-54
+    also_at: [lib/images.ts:4-5, lib/images.ts:100-112]
+    category: architecture
+    priority: must-find
+    key_point: >
+      Keeping images in the same database means they're backed up with their
+      note and removed by ON DELETE CASCADE, with no orphaned files. The cost:
+      the database file grows by up to 100 MB per note (20 × 5 MB), every
+      image view is a database read that loads the whole image into memory,
+      and nothing can be served from disk or a CDN — combined with
+      "no-cache", every page view re-reads every image.
+    answers:
+      good: >
+        The image bytes go straight into a table in SQLite, so they're deleted
+        with the note and backed up together — no stray files. But the
+        database grows fast, each request reads the full image into memory,
+        and since responses aren't cached every view hits the database again.
+        At scale you'd want files or object storage instead.
+      partial: >
+        Images are saved in a note_images table.
+      wrong: >
+        Images are saved to the public folder on disk and only their paths
+        are stored in the database.
+
+  - id: shared-images-gated-by-token
+    title: Shared images are served only while the note's share token matches
+    location: lib/images.ts:88-97
+    also_at: ["app/s/[token]/images/[imageId]/route.ts:5-11", lib/images.ts:108-110, lib/images.ts:77-86]
+    category: security
+    priority: must-find
+    key_point: >
+      The public image URL includes the share token and the query joins on
+      notes.share_token, so turning sharing off (token set to NULL) or
+      regenerating it immediately cuts off the images too; a guessed image id
+      alone reveals nothing, because it must belong to the note with that
+      token. "private, no-cache" makes the revocation take effect at once
+      instead of after a cache expires. Owner URLs check the logged-in user.
+    answers:
+      good: >
+        The shared image URL has the note's share token in it, and the lookup
+        only returns the image if that token is still the note's current one.
+        So when you stop sharing, the images stop loading straight away —
+        caching is set to revalidate every time for exactly that reason — and
+        you can't fetch someone's image just by guessing its id.
+      partial: >
+        Images on the shared page are public, but the owner's image URLs
+        need a login.
+      wrong: >
+        Once a note has been shared, its image URLs stay public, since the
+        image ids never change.
+
+  - id: upload-content-sniffing
+    title: Uploads are type-checked from their bytes, SVG is rejected, and responses are locked down
+    location: lib/images.ts:10-22
+    also_at: [lib/images.ts:99-107, lib/images.ts:40-46]
+    category: security
+    priority: nice-to-find
+    key_point: >
+      The browser's declared type is ignored: the file's magic bytes decide
+      whether it's PNG/JPEG/GIF/WebP, and SVG (which can contain scripts) is
+      refused. Responses add nosniff and a sandboxing CSP. Together these stop
+      an uploaded file from running script on the app's origin (stored XSS
+      against anyone viewing the note); removing any layer — e.g. "just trust
+      file.type" or "allow SVG" — reopens it.
+    answers:
+      good: >
+        It looks at the first bytes of the file to decide the type instead of
+        trusting what the browser says, and doesn't allow SVG because an SVG
+        can contain JavaScript. The response headers also stop the browser
+        from treating it as anything but an image. If you removed that, an
+        uploaded file could run script on our domain.
+      partial: >
+        It only accepts PNG, JPEG, GIF and WebP files.
+      wrong: >
+        It checks the file extension to make sure it's an image.
+
+  - id: global-body-size-limit
+    title: The server-action body limit is raised to 25 MB for the whole app
+    location: next.config.ts:6-10
+    also_at: [app/notes/actions.ts:67-73]
+    category: reliability
+    priority: nice-to-find
+    key_point: >
+      The limit is a global setting, so every server action (login, signup,
+      note saves) now accepts 25 MB bodies, not just uploads. The upload
+      action also buffers all files fully in memory with Promise.all before
+      the per-note count is checked, so a few concurrent 25 MB requests cost
+      real memory even when they're going to be rejected.
+    answers:
+      good: >
+        The 25 MB limit is set in next.config, so it applies to every server
+        action — even login can now receive 25 MB. And the upload reads all
+        the files into memory at once before checking the per-note limit, so
+        big concurrent uploads could use a lot of memory.
+      partial: >
+        The upload size limit was raised so larger images can be uploaded.
+      wrong: >
+        The 25 MB limit only applies to the image upload action.
+
+  - id: images-skip-updated-at
+    title: Adding or removing images doesn't change the note's updated_at
+    location: lib/images.ts:62-63
+    also_at: ["app/notes/[id]/page.tsx:39"]
+    category: correctness
+    priority: nice-to-find
+    key_point: >
+      The edit form is keyed on note.updatedAt, so bumping it would remount
+      the form and wipe unsaved text edits; the agent chose not to touch it.
+      The trade-off: "Last updated" (shown on the public shared page too) and
+      any ordering by updated_at ignore image changes, so a note whose images
+      changed looks untouched.
+    answers:
+      good: >
+        Image changes deliberately don't update updated_at, because the edit
+        form uses it as its key and would reset, losing whatever you'd typed.
+        The downside is the "Last updated" time — including on the shared
+        page — doesn't change when images are added or removed.
+      partial: >
+        Uploading an image doesn't count as editing the note.
+      wrong: >
+        Uploading an image updates the note's updated_at like any other edit.
