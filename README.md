@@ -12,8 +12,20 @@ decision record of what you understand.
 ## Install
 
 ```bash
+pipx install git+https://github.com/AttaAB/engineer-mentor
+mkdir -p ~/.config/mentor && echo "OPENAI_API_KEY=sk-..." > ~/.config/mentor/.env
+```
+
+No pipx? `brew install pipx` (macOS) or `python3 -m pip install --user pipx`.
+Plain pip works too: `pip install git+https://github.com/AttaAB/engineer-mentor`.
+The key can also come from the `OPENAI_API_KEY` environment variable;
+the reviewed repo's own `.env` is never read.
+
+**For development** (editable install, plus the eval tools):
+
+```bash
 python -m venv .venv
-.venv/bin/pip install -e .
+.venv/bin/pip install -e ".[eval]"
 echo "OPENAI_API_KEY=sk-..." > .env
 ```
 
