@@ -124,7 +124,15 @@ benchmark just measures its own opinions. For each decision in
 - **Answers realistic?** `good` / `partial` / `wrong` should sound like
   things a real developer would say.
 
-Then set `verified: true` at the top. Change cases are reviewed the same
-way; their must-finds should be what you'd expect the author of *that
-change* to explain in its code review. Unverified projects still run but
+Then set `verified: true` at the top.
+
+Change cases are reviewed with `python -m evals.review_labels`: it shows
+each label's code (changed lines highlighted), claim and sample answers —
+but hides the suggested priority and shuffles the order, so your call
+isn't anchored on the AI's. Press `m`/`n` for must-find/nice-to-find, `x`
+if it isn't a real decision, `c` to note a wrong claim; it resumes where
+you stopped. Fully reviewed changes with no notes are marked verified
+automatically; notes are resolved by Claude and re-checked by you. A
+change's must-finds are what you'd expect the author of *that change* to
+explain in its code review. Unverified projects still run but
 are flagged in results.

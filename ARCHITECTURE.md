@@ -49,6 +49,7 @@ mentor review
 | `evals/compare.py` | Before/after table between two eval runs. |
 | `evals/grader_replay.py` | Re-tests only the grader, on saved answer keys (like-for-like). |
 | `evals/rate.py` | A human rates questions, to check whether the AI judge can be trusted. |
+| `evals/review_labels.py` | A human reviews the change suite's labels (priority, real or not, notes) without seeing the AI's suggested priority; applies the verdicts to `labels.yaml`. |
 | `evals/results/` | Every eval's scores, one JSON line per project run. |
 
 Metrics: **Must@3** (are the 3 questions asked the must-know decisions?),

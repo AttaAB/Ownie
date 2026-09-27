@@ -74,6 +74,7 @@ python -m evals.run --config my-change      # name a variant
 python -m evals.run --suite change          # review only each project's follow-up change
 python -m evals.compare baseline my-change  # side-by-side with deltas
 python -m evals.benchmark --check           # every label's path:line exists
+python -m evals.review_labels               # review change-suite labels (you're the ground truth)
 ```
 
 | Metric | Meaning |
