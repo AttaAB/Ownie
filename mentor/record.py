@@ -5,6 +5,7 @@ is regenerated from it after every review so the two never drift.
 """
 
 import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -19,7 +20,10 @@ STATUS_LABELS = {
   "partial": "◐ partial",
   "revisit": "○ to revisit",
   "skipped": "· skipped",
+  "changed": "↻ code changed",
 }
+
+LOCATION = re.compile(r"^(.+?):(\d+)(?:-(\d+))?")
 
 
 def load_state():
@@ -41,7 +45,47 @@ def record_result(state, decision, status, answer, scope_label):
     "answer": answer,
     "reviewed_at": date.today().isoformat(),
     "scope": scope_label,
+    "snapshot": snapshot(decision.location),
   }
+
+
+def snapshot(location):
+  """The code at a decision's location, whitespace-normalised; None if unreadable."""
+  match = LOCATION.match(location)
+  if not match:
+    return None
+  path, start, end = match[1], int(match[2]), int(match[3] or match[2])
+  try:
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+  except (OSError, UnicodeDecodeError):
+    return None
+  return _normalise(lines[start - 1:end]) or None
+
+
+def mark_changed(state):
+  """Owned decisions whose code is gone from its file become "changed"; returns them.
+
+  Matching the snapshot anywhere in the file (not at its old line numbers)
+  means code that merely moved — lines added above it — isn't flagged.
+  """
+  changed = []
+  for entry in state["decisions"].values():
+    snap = entry.get("snapshot")
+    if entry["status"] != "owned" or not snap:
+      continue
+    path = LOCATION.match(entry["decision"]["location"])[1]
+    try:
+      current = _normalise(Path(path).read_text(encoding="utf-8").splitlines())
+    except (OSError, UnicodeDecodeError):
+      current = ""
+    if snap not in current:
+      entry["status"] = "changed"
+      changed.append(entry["decision"]["title"])
+  return changed
+
+
+def _normalise(lines):
+  return "\n".join(" ".join(line.split()) for line in lines if line.strip())
 
 
 def owned_titles(state):

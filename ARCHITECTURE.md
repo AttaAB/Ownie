@@ -33,7 +33,7 @@ mentor review
 | `verify.py` | Deterministic check: a decision survives only if one of its citations points at code the model was actually shown. |
 | `models.py` | `Decision` (the answer key + the question) and `Grade`. |
 | `session.py` | The interactive question loop. |
-| `record.py` | Saves review state and regenerates `DECISIONS.md` from it. |
+| `record.py` | Saves review state and regenerates `DECISIONS.md` from it. Keeps a snapshot of each answered decision's code, so an owned decision whose code later changes goes back to "↻ code changed" and is asked again. |
 | `ui.py` | Everything the user sees (rich panels, code snippets, end card). |
 
 ## Measurement — `benchmark/` + `evals/`

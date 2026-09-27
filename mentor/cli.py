@@ -7,7 +7,7 @@ from mentor import git as g
 from mentor import ui
 from mentor.llm import MissingAPIKey, ensure_api_key
 from mentor.pipeline import analyze
-from mentor.record import (DECISIONS_FILE, load_state, owned_titles, ownership, pending_decisions,
+from mentor.record import (DECISIONS_FILE, load_state, mark_changed, owned_titles, ownership, pending_decisions,
                            revisit_decisions, save_state)
 from mentor.scope import resolve_scope
 from mentor.session import QuitSession, read_input, run_session
@@ -125,6 +125,11 @@ def review_scope(args):
 
   if not any(looks_like_code(path) for path in scope.files + scope.untracked):
     ui.note("Only config/docs changed, so decisions may be shallow. `mentor review --all` looks at everything.")
+
+  changed = mark_changed(state)
+  if changed:
+    ui.note(f"{len(changed)} decision(s) you owned have changed code since, so they're back in scope: "
+            + "; ".join(changed))
 
   with ui.working(f"Reading {scope.label} and finding design decisions…"):
     analysis = analyze(scope, owned_titles=owned_titles(state))
