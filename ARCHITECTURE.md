@@ -60,6 +60,8 @@ plus AI-judge quality scores, which are **reference only**: calibrated
 against 20 human ratings they did no better than chance, so question
 quality is checked with human ratings (`evals/rate.py`) instead.
 
+`docs/` holds a recorded demo session and the project write-up.
+
 ## Design decisions (and why)
 
 - **Answer key before question.** Every decision is extracted with what

@@ -53,6 +53,10 @@ A session looks like this (abridged, from a real run on a small Flask API):
 At the end you get an ownership score for the repo and a record in
 `.mentor/DECISIONS.md`. The next `mentor review` only covers what's new.
 
+A full recorded session is in [docs/demo.md](docs/demo.md). How it was
+built and measured, and what the experiments taught, is in
+[docs/WRITEUP.md](docs/WRITEUP.md).
+
 ## Use it inside Claude Code
 
 Install the `/mentor` command once:
