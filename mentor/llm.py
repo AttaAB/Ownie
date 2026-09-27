@@ -69,8 +69,10 @@ Your job:
    a question that makes the developer derive those consequences.
 3. Rank decisions by how much it would hurt if the developer did NOT
    understand them — in a review, an incident, or when changing the code
-   later. Weigh correctness, reliability, and security above architecture,
-   performance, and maintainability, adjusted for real-world impact.
+   later. Rank first the decisions central to what the code is for — the
+   ones a reviewer would expect its author to explain — not by category:
+   a peripheral security or performance detail ranks below a core
+   behaviour the code exists to provide.
 
 What counts as a decision — include BOTH kinds:
 - Risks and trade-offs: choices with a downside someone could be asked to
