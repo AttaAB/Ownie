@@ -11,14 +11,16 @@ versions can be compared on identical inputs:
 
 import argparse
 import collections
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 from rich.console import Console
 from rich.table import Table
 
+from mentor.context import code_for
 from mentor.llm import ensure_api_key, grade_answer
 from mentor.models import Decision
-from evals.benchmark import load_projects
+from evals.benchmark import load_projects, project_repo
 from evals.compare import load, resolve
 from evals.run import EXPECTED_VERDICT
 
@@ -34,6 +36,7 @@ def main():
   path = resolve(args.results)
   projects = load_projects(suite="whole") + load_projects(suite="change")
   labels = {p.name: {d.id: d for d in p.decisions} for p in projects}
+  by_name = {p.name: p for p in projects}
 
   jobs = []
   for row in load(path):
@@ -51,9 +54,23 @@ def main():
   if not jobs:
     raise SystemExit(f"{path.name} has no stored answer keys (results before answer keys were saved).")
 
+  # The grader reads the code a decision cites; rebuild each project's repo to read it.
+  codes = {}
+  cwd = os.getcwd()
+  for name in sorted({j[0] for j in jobs}):
+    with project_repo(by_name[name]) as repo:
+      os.chdir(repo)
+      try:
+        for j in jobs:
+          if j[0] == name:
+            codes[(name, j[4].location, tuple(j[4].evidence))] = code_for(j[4])
+      finally:
+        os.chdir(cwd)
+
   with console.status(f"Grading {len(jobs)} answers…"):
     with ThreadPoolExecutor(max_workers=8) as pool:
-      verdicts = list(pool.map(lambda j: grade_answer(j[4], j[5]).verdict, jobs))
+      verdicts = list(pool.map(
+        lambda j: grade_answer(j[4], j[5], code=codes[(j[0], j[4].location, tuple(j[4].evidence))]).verdict, jobs))
 
   confusion = collections.Counter((j[3], v) for j, v in zip(jobs, verdicts))
   agree = sum(n for (expected, got), n in confusion.items() if expected == got)

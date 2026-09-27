@@ -132,6 +132,9 @@ Consequences / trade-offs:
 {consequences}
 Reference answer: {reference_answer}
 
+Code the decision cites (line-numbered):
+{code}
+
 Question asked: {question}
 
 Developer's answer{attempt_note}:
@@ -152,6 +155,11 @@ developer demonstrates about the question asked:
 
 Judge against the code's actual behaviour: an answer that sounds
 plausible but contradicts the code is "missing", not "partial".
+
+The consequences and reference answer above may be incomplete. If the
+developer makes a claim they don't mention, check it against the code:
+a claim the code supports is correct (and can be the central point);
+only a claim the code contradicts is wrong.
 
 Feedback rules:
 - Speak directly to the developer ("you"), 1–3 sentences.
@@ -180,13 +188,14 @@ def extract_decisions(context, scope_label, max_decisions=MAX_DECISIONS, owned_t
   return parse(prompt, DecisionSet).decisions
 
 
-def grade_answer(decision, answer, attempt=1):
+def grade_answer(decision, answer, attempt=1, code=""):
   prompt = GRADE_PROMPT.format(
     title=decision.title,
     location=decision.location,
     chosen=decision.chosen,
     consequences="\n".join(f"- {c}" for c in decision.consequences),
     reference_answer=decision.reference_answer,
+    code=code or "(not available)",
     question=decision.question,
     attempt_note=f" (attempt {attempt})" if attempt > 1 else "",
     answer=answer,

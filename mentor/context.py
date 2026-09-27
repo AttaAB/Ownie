@@ -14,6 +14,7 @@ from mentor.scope import exclude_pathspecs
 
 MAX_CONTEXT_CHARS = 150_000
 MAX_FILE_CHARS = 40_000
+MAX_GRADER_CHARS = 60_000
 
 HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 DIFF_TARGET = re.compile(r"^\+\+\+ b/(.+)$")
@@ -47,6 +48,21 @@ def build_context(scope):
       context.visible_lines.setdefault(path, set()).update(numbers)
 
   return context
+
+
+def code_for(decision):
+  """The full files a decision cites, line-numbered, for the grader.
+
+  The answer key can miss things; with the code, the grader can check a
+  claim the key doesn't cover instead of calling it wrong.
+  """
+  paths = dict.fromkeys(ref.split(":")[0].strip() for ref in [decision.location, *decision.evidence])
+  text = ""
+  for path in paths:
+    section = _numbered_file(path)
+    if section and len(text) + len(section[0]) <= MAX_GRADER_CHARS:
+      text += section[0] + "\n"
+  return text
 
 
 def _split_diff(diff):

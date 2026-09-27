@@ -1,6 +1,7 @@
 """The interactive question → answer → grade loop."""
 
 from mentor import ui
+from mentor.context import code_for
 from mentor.llm import grade_answer
 from mentor.record import record_result
 
@@ -47,6 +48,7 @@ def ask_decision(decision, number, total):
   ui.question_card(decision, number, total)
   ui.controls()
 
+  code = code_for(decision)
   attempt = 0
   best = "missing"
   last_answer = None
@@ -71,7 +73,7 @@ def ask_decision(decision, number, total):
     attempt += 1
     last_answer = text
     with ui.working("Grading your answer…"):
-      grade = grade_answer(decision, text, attempt)
+      grade = grade_answer(decision, text, attempt, code=code)
     ui.verdict(grade)
 
     if grade.verdict == "owned":

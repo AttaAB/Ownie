@@ -28,7 +28,7 @@ mentor review
 | `scope.py` | Decides which code to review: branch vs main, since last review, `--since`, `--uncommitted`, `--all`; applies `.mentorignore`. |
 | `git.py` | Thin wrapper around the `git` command line. |
 | `pipeline.py` | `analyze(scope)`: the non-interactive core. **The CLI and the evals both call this**, so what we measure is what users get. |
-| `context.py` | Turns the scope into text for the model, with a line number on every line so it can cite `file:line`. |
+| `context.py` | Turns the scope into text for the model, with a line number on every line so it can cite `file:line`; `code_for` gives the grader the full files a decision cites. |
 | `llm.py` | The two model calls: `extract_decisions` and `grade_answer`, plus their prompts. |
 | `verify.py` | Deterministic check: a decision survives only if one of its citations points at code the model was actually shown. |
 | `models.py` | `Decision` (the answer key + the question) and `Grade`. |
@@ -74,6 +74,10 @@ quality is checked with human ratings (`evals/rate.py`) instead.
 - **One shared pipeline.** The eval can't drift from the product.
 - **The grader never gives false confidence.** It would rather mark a
   good answer "partial" than mark a wrong one "owned".
+- **The grader sees the code, not just the answer key.** Answer keys can
+  miss things; a correct claim the key doesn't cover is checked against
+  the cited files instead of being marked wrong (found in real use: a
+  correct "every group ID is listed by GET /groups" was graded missing).
 - **Evals are the judge of every change.** Keep a change only if the
   numbers improve.
 

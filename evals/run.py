@@ -22,6 +22,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
+from mentor.context import code_for
 from mentor.llm import ensure_api_key, grade_answer, model_name
 from mentor.pipeline import analyze
 from mentor import git
@@ -105,10 +106,11 @@ def evaluate(project, run, test_grader):
     os.chdir(repo)
     try:
       analysis = analyze(_change_scope() if project.change else _whole_repo())
+      predicted = _unique_ids(analysis.decisions)
+      codes = {d.id: code_for(d) for d in predicted}  # read now: the repo is gone after this block
     finally:
       os.chdir(cwd)
 
-  predicted = _unique_ids(analysis.decisions)
   labels = project.decisions
   code = analysis.context_text
 
@@ -117,7 +119,7 @@ def evaluate(project, run, test_grader):
     quality_future = pool.submit(score_questions, predicted, code)
     matches, quality = matches_future.result(), quality_future.result()
 
-  grader = run_grader(labels, predicted, matches) if test_grader else []
+  grader = run_grader(labels, predicted, matches, codes) if test_grader else []
   metrics = compute_metrics(labels, predicted, analysis, matches, quality, grader)
   metrics["seconds"] = round(time.time() - started, 1)
 
@@ -144,7 +146,7 @@ def _change_scope():
   return _diff_scope(git.git("rev-parse", "HEAD~1").strip(), "last commit")
 
 
-def run_grader(labels, predicted, matches):
+def run_grader(labels, predicted, matches, codes):
   """Grade each label's sample answers against the mentor's own answer key."""
   decision_for_label = {}
   for d, m in zip(predicted, matches):
@@ -157,7 +159,7 @@ def run_grader(labels, predicted, matches):
     for kind in EXPECTED_VERDICT
   ]
   with ThreadPoolExecutor(max_workers=6) as pool:
-    grades = list(pool.map(lambda job: grade_answer(job[2], job[3]), jobs))
+    grades = list(pool.map(lambda job: grade_answer(job[2], job[3], code=codes[job[2].id]), jobs))
 
   return [
     {"label": label_id, "answer": kind, "expected": EXPECTED_VERDICT[kind], "got": grade.verdict}
