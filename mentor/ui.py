@@ -82,6 +82,18 @@ def choice_menu(question, options):
     console.print(f"  [cyan]{number}[/]  {label}")
 
 
+def greet(message, pose=None):
+  """Ownie says `message` (waving in, unless a pose is given); plain text without Ownie."""
+  if not mascot.enabled(console):
+    console.print(message)
+    return
+  console.print()
+  if pose:
+    mascot.say(console, pose, message, width=min(_width() - 18, 64))
+  else:
+    mascot.hello(console, message, width=min(_width() - 18, 64))
+
+
 def found(count, asked, scope_label):
   console.print()
   plural = "s" if count != 1 else ""

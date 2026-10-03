@@ -149,7 +149,7 @@ def review_scope(args):
     return
 
   if scope.is_empty:
-    ui.info(f"Nothing new to review ({scope.label}).")
+    ui.greet(f"Nothing new to review ({scope.label}). Here's what else we can do:", pose="idle")
     ui.other_options(len(state["pending"]), len(revisit_decisions(state)))
     return
 
@@ -187,10 +187,10 @@ def review_pending(args):
   state = load_state()
   pending = pending_decisions(state)
   if not pending:
-    ui.info("Nothing left over from the last review. Run `mentor review` for new changes.")
+    ui.greet("Nothing left over from the last review. Run `mentor review` for new changes.", pose="idle")
     return
 
-  ui.info(f"{len(pending)} decision(s) left from the last review.")
+  ui.greet(f"Welcome back! {len(pending)} decision{'s' if len(pending) != 1 else ''} left from the last review. Let's keep going.")
   finish(state, pending[:args.n], pending[args.n:], "continued review")
 
 
@@ -251,10 +251,10 @@ def review_revisit(args):
   state = load_state()
   decisions = revisit_decisions(state)
   if not decisions:
-    ui.info("Nothing to revisit — every decision you've answered is owned.")
+    ui.greet("Nothing to revisit — every decision you've answered is owned!", pose="cheer")
     return
 
-  ui.info(f"{len(decisions)} decision(s) you haven't owned yet.")
+  ui.greet(f"Round two! {len(decisions)} decision{'s' if len(decisions) != 1 else ''} you haven't owned yet. You've got this.")
   asked = decisions[:args.n]
   previous = {d.id: state["decisions"][d.id] for d in asked}
   before = ownership(state)

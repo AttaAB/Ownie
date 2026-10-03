@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "engineering-mentor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Understand and own the design decisions in AI-written code."
 readme = "README.md"
 requires-python = ">=3.11"
