@@ -3,14 +3,14 @@ import os
 import sys
 from pathlib import Path
 
-from mentor import git as g
-from mentor import ui
-from mentor.llm import MissingAPIKey, ensure_api_key
-from mentor.pipeline import queue_review
-from mentor.record import (DECISIONS_FILE, load_state, mark_changed, ownership, pending_decisions, revisit_decisions,
+from ownie import git as g
+from ownie import ui
+from ownie.llm import MissingAPIKey, ensure_api_key
+from ownie.pipeline import queue_review
+from ownie.record import (DECISIONS_FILE, load_state, mark_changed, ownership, pending_decisions, revisit_decisions,
                            save_state)
-from mentor.scope import EMPTY_TREE, _diff_scope, resolve_scope
-from mentor.session import QuitSession, read_input, run_session
+from ownie.scope import EMPTY_TREE, _diff_scope, resolve_scope
+from ownie.session import QuitSession, read_input, run_session
 
 QUESTIONS_PER_RUN = 3
 
@@ -21,16 +21,16 @@ NON_CODE_SUFFIXES = {
 NON_CODE_NAMES = {".gitignore", ".env.example", "LICENSE", "requirements.txt"}
 
 OVERVIEW = f"""\
-mentor — own the design decisions in code you didn't write.
+ownie — a Socratic code-comprehension evaluator for AI-generated code.
 
 Finds the design decisions in your recent changes, asks you about them,
 grades your answers, and records what you understand in
-.mentor/DECISIONS.md.
+.ownie/DECISIONS.md.
 
 Usage:
-  mentor review [options]
-  mentor status              where this repo stands (no questions, no API calls)
-  mentor ask | answer | hint | explain | skip
+  ownie review [options]
+  ownie status              where this repo stands (no questions, no API calls)
+  ownie ask | answer | hint | explain | skip
                              the same review as JSON commands, for tools like
                              Claude Code (see integrations/claude-code/)
 
@@ -47,7 +47,7 @@ What to review (pick at most one; default is "recent changes"):
 How to review:
   -n NUMBER            questions to ask (default {QUESTIONS_PER_RUN})
   -v, --verbose        show each step as it runs
-  --plain              no Ownie the robot, no animation (or set MENTOR_PLAIN=1)
+  --plain              no Ownie the robot, no animation (or set OWNIE_PLAIN=1)
   -h, --help           show this help
 
 During a review:
@@ -55,12 +55,12 @@ During a review:
   s  skip this question             q  quit (progress is saved)
 
 Examples:
-  mentor review                     review what's new
-  mentor review --uncommitted       check what Claude just wrote
-  mentor review --since 3            the last 3 commits
-  mentor review --since "2 days ago" -n 5
-  mentor review --all -v
-  mentor review --revisit           retry what you didn't own last time
+  ownie review                     review what's new
+  ownie review --uncommitted       check what Claude just wrote
+  ownie review --since 3            the last 3 commits
+  ownie review --since "2 days ago" -n 5
+  ownie review --all -v
+  ownie review --revisit           retry what you didn't own last time
 """
 
 
@@ -68,7 +68,7 @@ class FriendlyParser(argparse.ArgumentParser):
   """argparse, but every error points at the full help screen."""
 
   def error(self, message):
-    sys.stderr.write(f"mentor: {message}\n\nRun `mentor -h` to see every command and option.\n")
+    sys.stderr.write(f"ownie: {message}\n\nRun `ownie -h` to see every command and option.\n")
     sys.exit(2)
 
 
@@ -78,7 +78,7 @@ def main(argv=None):
     print(OVERVIEW)
     return
 
-  parser = FriendlyParser(prog="mentor", add_help=False, allow_abbrev=False)
+  parser = FriendlyParser(prog="ownie", add_help=False, allow_abbrev=False)
   sub = parser.add_subparsers(dest="command", required=True, parser_class=FriendlyParser)
 
   review = sub.add_parser("review", add_help=False, allow_abbrev=False)
@@ -118,10 +118,10 @@ def main(argv=None):
   try:
     os.chdir(g.repo_root())
   except g.GitError:
-    sys.exit("mentor: not inside a git repository.")
+    sys.exit("ownie: not inside a git repository.")
 
   if getattr(args, "plain", False):
-    os.environ["MENTOR_PLAIN"] = "1"
+    os.environ["OWNIE_PLAIN"] = "1"
   if args.command == "status":
     return show_status()
   if args.command in ("ask", "answer", "hint", "explain", "skip"):
@@ -138,7 +138,7 @@ def main(argv=None):
     else:
       review_scope(args)
   except (g.GitError, MissingAPIKey) as error:
-    sys.exit(f"mentor: {error}")
+    sys.exit(f"ownie: {error}")
 
 
 def review_scope(args):
@@ -156,7 +156,7 @@ def review_scope(args):
   ui.step(args.verbose, "scope", f"{scope.label} · {len(scope.files) + len(scope.untracked)} files · {scope.stats}")
 
   if not any(looks_like_code(path) for path in scope.files + scope.untracked):
-    ui.note("Only config/docs changed, so decisions may be shallow. `mentor review --all` looks at everything.")
+    ui.note("Only config/docs changed, so decisions may be shallow. `ownie review --all` looks at everything.")
 
   with ui.working(f"Reading {scope.label} and finding design decisions…"):
     analysis, decisions, changed = queue_review(state, scope)
@@ -187,7 +187,7 @@ def review_pending(args):
   state = load_state()
   pending = pending_decisions(state)
   if not pending:
-    ui.greet("Nothing left over from the last review. Run `mentor review` for new changes.", pose="idle")
+    ui.greet("Nothing left over from the last review. Run `ownie review` for new changes.", pose="idle")
     return
 
   ui.greet(f"Welcome back! {len(pending)} decision{'s' if len(pending) != 1 else ''} left from the last review. Let's keep going.")
@@ -195,29 +195,29 @@ def review_pending(args):
 
 
 def run_headless(args):
-  from mentor import headless
+  from ownie import headless
   try:
     if args.command in ("ask", "answer"):
       ensure_api_key()
     if args.command == "ask":
       if args.more and args.revisit:
-        sys.exit("mentor: use either --more or --revisit, not both")
+        sys.exit("ownie: use either --more or --revisit, not both")
       headless.ask(args)
     elif args.command == "answer":
       text = " ".join(args.text) if args.text else sys.stdin.read().strip()
       if not text:
-        sys.exit("mentor: no answer given (pass it as an argument or on stdin)")
+        sys.exit("ownie: no answer given (pass it as an argument or on stdin)")
       headless.answer(args.id, text)
     else:
       getattr(headless, args.command)(args.id)
   except (g.GitError, MissingAPIKey) as error:
-    sys.exit(f"mentor: {error}")
+    sys.exit(f"ownie: {error}")
 
 
 def show_status():
   state = load_state()
   if not state["decisions"] and not state["pending"]:
-    ui.info("No reviews yet in this repo. Run `mentor review` to start.")
+    ui.info("No reviews yet in this repo. Run `ownie review` to start.")
     return
 
   changed = mark_changed(state)
@@ -241,7 +241,7 @@ def show_status():
     changed=[e["decision"]["title"] for e in state["decisions"].values() if e["status"] == "changed"],
     last_reviewed=g.short(last) if last else None,
     new_commits=new_commits,
-    # via the review scope, so mentor's own .mentor/ files and lockfiles don't count
+    # via the review scope, so Ownie's own .ownie/ files and lockfiles don't count
     uncommitted=not _diff_scope(g.head_commit() or EMPTY_TREE, "uncommitted").is_empty,
     record_path=DECISIONS_FILE,
   )

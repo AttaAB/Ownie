@@ -17,9 +17,9 @@ from concurrent.futures import ThreadPoolExecutor
 from rich.console import Console
 from rich.table import Table
 
-from mentor.context import code_for
-from mentor.llm import ensure_api_key, grade_answer
-from mentor.models import Decision
+from ownie.context import code_for
+from ownie.llm import ensure_api_key, grade_answer
+from ownie.models import Decision
 from evals.benchmark import load_projects, project_repo
 from evals.compare import load, resolve
 from evals.run import EXPECTED_VERDICT

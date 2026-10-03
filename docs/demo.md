@@ -1,6 +1,6 @@
-# Demo: a mentor review, start to finish
+# Demo: a ownie review, start to finish
 
-A real `mentor review --all` session on a small expense-splitting API
+A real review session on a small expense-splitting API
 (Flask + SQLite, ~490 lines) that a fresh AI agent vibe-coded from a
 one-paragraph prompt, with no design steering.
 
@@ -23,7 +23,11 @@ Things to notice:
   quite*, because Werkzeug's debugger is PIN-protected: the grader reads
   the code and doesn't reward overstatement.
 - Question 3 ends with **e** (explain): the answer key is shown, and the
-  decision is kept for `mentor review --revisit`.
+  decision is kept for `ownie review --revisit`.
+
+> Recorded before the project was renamed from Engineering Mentor to
+> Ownie, so the transcript shows the old `mentor` command (now `ownie`)
+> and predates Ownie the robot.
 
 ```text
 $ mentor review --all

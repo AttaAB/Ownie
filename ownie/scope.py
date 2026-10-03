@@ -9,13 +9,14 @@ from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
 
-from mentor import git as g
+from ownie import git as g
 
 # git's well-known empty tree: diffing against it shows every file as added,
 # which lets "last N commits" work even when N reaches past the first commit.
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 NOISE_PATTERNS = [
+  ".ownie/*",
   ".mentor/*",
   "*.lock",
   "package-lock.json",
@@ -40,16 +41,16 @@ class Scope:
     return not self.files and not self.untracked
 
 
-IGNORE_FILE = ".mentorignore"
+IGNORE_FILES = (".ownieignore", ".mentorignore")  # the second is the pre-rename name
 
 
 def ignore_patterns():
-  """Built-in noise plus the repo's .mentorignore (one glob per line, # comments)."""
+  """Built-in noise plus the repo's .ownieignore (one glob per line, # comments)."""
   patterns = list(NOISE_PATTERNS)
-  try:
-    lines = Path(IGNORE_FILE).read_text().splitlines()
-  except FileNotFoundError:
+  found = next((Path(f) for f in IGNORE_FILES if Path(f).is_file()), None)
+  if not found:
     return patterns
+  lines = found.read_text().splitlines()
 
   for line in lines:
     line = line.strip()

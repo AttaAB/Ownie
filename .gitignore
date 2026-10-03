@@ -5,6 +5,7 @@ __pycache__/
 context.md
 resume.md
 *.egg-info/
+.ownie/
 .mentor/
 context-archive.md
 CLAUDE.local.md

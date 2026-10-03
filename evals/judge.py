@@ -1,7 +1,7 @@
 """LLM-as-judge: match predicted decisions to labels and score question quality.
 
-The judge sees the same code the mentor saw. Its model can be set
-separately with MENTOR_JUDGE_MODEL so the mentor isn't grading itself
+The judge sees the same code Ownie saw. Its model can be set
+separately with OWNIE_JUDGE_MODEL so Ownie isn't grading itself
 with an identical setup.
 """
 
@@ -9,11 +9,11 @@ import os
 
 from pydantic import BaseModel, Field
 
-from mentor.llm import parse
+from ownie.llm import parse
 
 
 def judge_model():
-  return os.environ.get("MENTOR_JUDGE_MODEL") or None  # None → same as mentor
+  return os.environ.get("OWNIE_JUDGE_MODEL") or os.environ.get("MENTOR_JUDGE_MODEL") or None  # None → same as Ownie
 
 
 class Match(BaseModel):

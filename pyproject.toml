@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "engineering-mentor"
+name = "ownie"
 version = "0.2.0"
-description = "Understand and own the design decisions in AI-written code."
+description = "A Socratic code-comprehension evaluator for AI-generated code."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,13 +16,13 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/AttaAB/engineer-mentor"
+Homepage = "https://github.com/AttaAB/ownie"
 
 [project.optional-dependencies]
 eval = ["pyyaml>=6"]
 
 [project.scripts]
-mentor = "mentor.cli:main"
+ownie = "ownie.cli:main"
 
 [tool.setuptools]
-packages = ["mentor"]
+packages = ["ownie"]

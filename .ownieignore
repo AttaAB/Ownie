@@ -1,0 +1,2 @@
+# Paths ownie review should skip (globs, one per line)
+benchmark/

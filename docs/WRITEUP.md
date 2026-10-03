@@ -1,4 +1,6 @@
-# Engineering Mentor — write-up
+# Ownie — write-up
+
+*Ownie: a Socratic code-comprehension evaluator for AI-generated code. (Originally called Engineering Mentor, with a `mentor` command.)*
 
 ## The problem
 
@@ -9,7 +11,7 @@ lives, what happens when two requests race, what a failure does to the
 user — and the person shipping it often can't explain them. That gap
 shows up in code review, during incidents, and in interviews.
 
-`mentor review` closes it. It finds the design decisions in code you
+`ownie review` closes it. It finds the design decisions in code you
 didn't write, asks you about them as concrete scenarios ("two people
 claim the same alias at the same moment — what happens?"), grades your
 plain-English answer, and keeps a record of what you own. It never
@@ -29,11 +31,11 @@ changes the code.
 4. **Questions and grading.** The top three are asked as scenarios. The
    grader sees the answer key *and* the cited code, and grades owned /
    partial / missing. It's built to never give false confidence.
-5. **Record.** `.mentor/DECISIONS.md` and an ownership score. Later
+5. **Record.** `.ownie/DECISIONS.md` and an ownership score. Later
    reviews reuse decision ids (no duplicates), and re-ask an owned
    decision if its code changes.
 
-It runs in the terminal, or inside Claude Code via `/mentor`, using the
+It runs in the terminal, or inside Claude Code via `/ownie`, using the
 same pipeline and state.
 
 ## Measuring it

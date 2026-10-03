@@ -1,11 +1,11 @@
 """Non-interactive commands for driving a review from a tool (e.g. Claude Code).
 
-  mentor ask [scope flags | --more | --revisit] [-n N]   next questions
-  mentor answer ID "TEXT"   (or TEXT on stdin)          grade an answer
-  mentor hint ID  ·  mentor explain ID  ·  mentor skip ID
+  ownie ask [scope flags | --more | --revisit] [-n N]   next questions
+  ownie answer ID "TEXT"   (or TEXT on stdin)          grade an answer
+  ownie hint ID  ·  ownie explain ID  ·  ownie skip ID
 
-Each prints one JSON object. They share the pipeline and `.mentor/` state
-with `mentor review`, so the record and ownership score stay in step.
+Each prints one JSON object. They share the pipeline and `.ownie/` state
+with `ownie review`, so the record and ownership score stay in step.
 Answers not yet finished are tracked in state["in_progress"] (attempts and
 best verdict), so a question behaves the same as in the terminal loop.
 """
@@ -13,13 +13,13 @@ best verdict), so a question behaves the same as in the terminal loop.
 import json
 from pathlib import Path
 
-from mentor.context import code_for
-from mentor.llm import grade_answer
-from mentor.pipeline import queue_review
-from mentor.record import (LOCATION, load_state, ownership, pending_decisions, record_result, revisit_decisions,
+from ownie.context import code_for
+from ownie.llm import grade_answer
+from ownie.pipeline import queue_review
+from ownie.record import (LOCATION, load_state, ownership, pending_decisions, record_result, revisit_decisions,
                            save_state)
-from mentor.scope import resolve_scope
-from mentor.session import MAX_ATTEMPTS
+from ownie.scope import resolve_scope
+from ownie.session import MAX_ATTEMPTS
 
 SCOPE_LABEL = "claude code"
 MAX_CODE_LINES = 30
@@ -106,7 +106,7 @@ def _find(state, decision_id):
   for d in pending_decisions(state) + revisit_decisions(state):
     if d.id == decision_id:
       return d
-  _print({"error": f"no open decision with id {decision_id!r}; run `mentor ask` for current ids"})
+  _print({"error": f"no open decision with id {decision_id!r}; run `ownie ask` for current ids"})
   raise SystemExit(1)
 
 

@@ -6,11 +6,11 @@ what users get.
 
 from dataclasses import dataclass
 
-from mentor import git as g
-from mentor.context import build_context
-from mentor.llm import extract_decisions
-from mentor.record import known_decisions, mark_changed, pending_decisions
-from mentor.verify import filter_decisions
+from ownie import git as g
+from ownie.context import build_context
+from ownie.llm import extract_decisions
+from ownie.record import known_decisions, mark_changed, pending_decisions
+from ownie.verify import filter_decisions
 
 
 @dataclass
@@ -42,7 +42,7 @@ def analyze(scope, known=()):
 def queue_review(state, scope):
   """Find decisions in `scope` and put them at the front of the queue.
 
-  Shared by `mentor review` and `mentor ask`. Returns (analysis, new
+  Shared by `ownie review` and `ownie ask`. Returns (analysis, new
   decisions, titles of owned decisions whose code changed); the caller
   saves the state.
   """

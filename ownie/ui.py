@@ -14,8 +14,8 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from mentor import mascot
-from mentor.verify import parse_refs
+from ownie import mascot
+from ownie.verify import parse_refs
 
 console = Console(highlight=False)
 
@@ -195,10 +195,10 @@ def other_options(pending, to_revisit):
   """What else there is to do when a review finds nothing new."""
   rows = []
   if pending:
-    rows.append(("mentor review --more", f"{pending} decision{'s' if pending != 1 else ''} not asked yet"))
+    rows.append(("ownie review --more", f"{pending} decision{'s' if pending != 1 else ''} not asked yet"))
   if to_revisit:
-    rows.append(("mentor review --revisit", f"{to_revisit} not owned yet"))
-  rows.append(("mentor review --all", "look at the whole project again"))
+    rows.append(("ownie review --revisit", f"{to_revisit} not owned yet"))
+  rows.append(("ownie review --all", "look at the whole project again"))
   for command, why in rows:
     console.print(Text.assemble("  ", (f"{command:<26}", "cyan"), (why, "dim")))
 
@@ -235,9 +235,9 @@ def end_card(tally, ownership_before, ownership_after, left, to_revisit, record_
 
   lines = [counts, Text(""), meter, Text("")]
   if left:
-    lines.append(Text.assemble(("Next  ", "bold"), (f"mentor review --more", "cyan"), (f"  ({left} decision{'s' if left != 1 else ''} left)", "dim")))
+    lines.append(Text.assemble(("Next  ", "bold"), (f"ownie review --more", "cyan"), (f"  ({left} decision{'s' if left != 1 else ''} left)", "dim")))
   if to_revisit:
-    lines.append(Text.assemble(("Retry  ", "bold"), ("mentor review --revisit", "cyan"), (f"  ({to_revisit} not owned yet)", "dim")))
+    lines.append(Text.assemble(("Retry  ", "bold"), ("ownie review --revisit", "cyan"), (f"  ({to_revisit} not owned yet)", "dim")))
   lines.append(Text.assemble(("Record  ", "bold"), (str(record_path), "dim")))
 
   console.print()
@@ -290,11 +290,11 @@ def status_card(ownership, counts, pending, to_revisit, changed, last_reviewed, 
 
   # one suggestion: new code first, then leftovers, then retries
   if new_commits or uncommitted or changed:
-    nxt = ("mentor review", "review what's new")
+    nxt = ("ownie review", "review what's new")
   elif pending:
-    nxt = ("mentor review --more", f"{pending} decision{'s' if pending != 1 else ''} not asked yet")
+    nxt = ("ownie review --more", f"{pending} decision{'s' if pending != 1 else ''} not asked yet")
   elif to_revisit:
-    nxt = ("mentor review --revisit", f"{to_revisit} not owned yet")
+    nxt = ("ownie review --revisit", f"{to_revisit} not owned yet")
   else:
     nxt = None
   if nxt:
@@ -303,7 +303,7 @@ def status_card(ownership, counts, pending, to_revisit, changed, last_reviewed, 
     lines.append(Text.assemble(("Next     ", "bold"), ("nothing to do — everything here is owned", "green")))
   lines.append(Text.assemble(("Record   ", "bold"), (str(record_path), "dim")))
 
-  console.print(Panel(Group(*lines), title=" mentor status ", title_align="left", border_style="cyan",
+  console.print(Panel(Group(*lines), title=" ownie status ", title_align="left", border_style="cyan",
                       padding=(1, 2), width=_width()))
 
 

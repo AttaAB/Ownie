@@ -1,4 +1,4 @@
-"""Hand-rate mentor questions, to calibrate the LLM judge against a human.
+"""Hand-rate Ownie's questions, to calibrate the LLM judge against a human.
 
   python -m evals.rate                 # rate 20 questions sampled from the latest results
   python -m evals.rate -n 30 --results questions-v3

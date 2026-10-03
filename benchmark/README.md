@@ -1,7 +1,7 @@
 # Decision Benchmark
 
 Small vibe-coded projects with hand-verified labels of the design
-decisions they contain. `python -m evals.run` measures how well `mentor`
+decisions they contain. `python -m evals.run` measures how well `ownie`
 finds those decisions, how good its questions are, and how accurately it
 grades answers.
 
@@ -19,7 +19,7 @@ benchmark/
 
 Two suites: `python -m evals.run` reviews each whole repo;
 `python -m evals.run --suite change` commits the repo, applies the patch
-as a second commit, and reviews only that commit — the way `mentor review`
+as a second commit, and reviews only that commit — the way `ownie review`
 is used after someone (or an AI) makes a change.
 
 | Project | Language | Built by | Labels |
@@ -43,7 +43,7 @@ project counts as verified once its `verified: true` is set.
 ## How to build a project
 
 The three generated projects were built by fresh Claude Code agents given
-*only* the prompt below — no knowledge of mentor, the benchmark, or the
+*only* the prompt below — no knowledge of Ownie, the benchmark, or the
 labels, and no design steering — which is equivalent to a user pasting
 the prompt into a new session. To add a project by hand instead:
 
@@ -53,8 +53,8 @@ steering the design* — so build these the way a vibe coder would.
 1. Make an empty folder **outside this repo** and open a fresh Claude Code
    session in it:
    ```bash
-   mkdir -p ~/Desktop/Developer/mentor-benchmark/notes-app
-   cd ~/Desktop/Developer/mentor-benchmark/notes-app && git init && claude
+   mkdir -p ~/Desktop/Developer/ownie-benchmark/notes-app
+   cd ~/Desktop/Developer/ownie-benchmark/notes-app && git init && claude
    ```
 2. Paste the project's prompt below. Accept its choices; only intervene
    when something doesn't run. Don't ask for "best practices", don't
@@ -64,10 +64,10 @@ steering the design* — so build these the way a vibe coder would.
    ```bash
    rsync -a --exclude .git --exclude node_modules --exclude .next \
      --exclude dist --exclude __pycache__ --exclude .venv --exclude '*.db' \
-     ~/Desktop/Developer/mentor-benchmark/notes-app/ \
-     ~/Desktop/Developer/engineering-mentor/benchmark/notes-app/repo/
+     ~/Desktop/Developer/ownie-benchmark/notes-app/ \
+     ~/Desktop/Developer/ownie/benchmark/notes-app/repo/
    ```
-5. Tell Claude (in the engineering-mentor session) the project is in; it
+5. Tell Claude (in the Ownie repo's session) the project is in; it
    drafts `labels.yaml`, and you review it (below).
 
 ## How to add a change

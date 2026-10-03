@@ -1,31 +1,31 @@
 # Architecture
 
-`mentor review` reads code you didn't write, finds the design decisions in
+`ownie review` reads code you didn't write, finds the design decisions in
 it, asks you about them, grades your answers, and records what you
-understand. The codebase has two halves: the **product** (`mentor/`) and
+understand. The codebase has two halves: the **product** (`ownie/`) and
 the **measurement** that tells us whether the product is any good
 (`evals/` + `benchmark/`).
 
 ## How a review flows
 
 ```text
-mentor review
+ownie review
   cli.py ── scope.py ─────── which code? (git range, or --all)          uses git.py
         └─ pipeline.py ──── analyze(scope):
               context.py      code → line-numbered text for the model
               llm.py          extract decisions (each with a hidden answer key)
               verify.py       drop decisions whose file:line citations don't exist
         └─ session.py ───── ask → answer → grade (llm.py) → hint / explain
-        └─ record.py ────── .mentor/state.json → .mentor/DECISIONS.md
+        └─ record.py ────── .ownie/state.json → .ownie/DECISIONS.md
         ui.py renders everything; models.py defines the shared data shapes
 ```
 
-## Product — `mentor/`
+## Product — `ownie/`
 
 | File | Job |
 |---|---|
-| `cli.py` | The `mentor` command: parses flags, runs the steps above in order; `mentor status` summarises ownership and what's waiting without calling the model. |
-| `scope.py` | Decides which code to review: branch vs main, since last review, `--since`, `--uncommitted`, `--all`; applies `.mentorignore`. |
+| `cli.py` | The `ownie` command: parses flags, runs the steps above in order; `ownie status` summarises ownership and what's waiting without calling the model. |
+| `scope.py` | Decides which code to review: branch vs main, since last review, `--since`, `--uncommitted`, `--all`; applies `.ownieignore`. |
 | `git.py` | Thin wrapper around the `git` command line. |
 | `pipeline.py` | `analyze(scope)`: the non-interactive core. **The CLI and the evals both call this**, so what we measure is what users get. `queue_review` adds the found decisions to the review queue (shared by `review` and `ask`). |
 | `context.py` | Turns the scope into text for the model, with a line number on every line so it can cite `file:line`; `code_for` gives the grader the full files a decision cites. |
@@ -33,10 +33,10 @@ mentor review
 | `verify.py` | Deterministic check: a decision survives only if one of its citations points at code the model was actually shown. |
 | `models.py` | `Decision` (the answer key + the question) and `Grade`. |
 | `session.py` | The interactive question loop. |
-| `headless.py` | The same review as JSON commands (`ask`, `answer`, `hint`, `explain`, `skip`) for tools; `integrations/claude-code/mentor.md` is the `/mentor` command that drives them. |
+| `headless.py` | The same review as JSON commands (`ask`, `answer`, `hint`, `explain`, `skip`) for tools; `integrations/claude-code/ownie.md` is the `/ownie` command that drives them. |
 | `record.py` | Saves review state and regenerates `DECISIONS.md` from it. Keeps a snapshot of each answered decision's code, so an owned decision whose code later changes goes back to "↻ code changed" and is asked again. |
 | `ui.py` | Everything the user sees (rich panels, code snippets, end card). |
-| `mascot.py` | Ownie, the pixel-robot mascot: poses drawn on a pixel grid and rendered with half-block characters, plus the wave and thinking animations. Off for pipes, `--plain`, or `MENTOR_PLAIN=1`. |
+| `mascot.py` | Ownie, the pixel-robot mascot: poses drawn on a pixel grid and rendered with half-block characters, plus the wave and thinking animations. Off for pipes, `--plain`, or `OWNIE_PLAIN=1`. |
 
 ## Measurement — `benchmark/` + `evals/`
 

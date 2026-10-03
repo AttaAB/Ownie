@@ -1,4 +1,4 @@
-"""Run the mentor pipeline against the benchmark and score it.
+"""Run Ownie's pipeline against the benchmark and score it.
 
   python -m evals.run                      # all projects, 3 runs, config "baseline"
   python -m evals.run --config repo-map --runs 5
@@ -22,11 +22,11 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from mentor.context import code_for
-from mentor.llm import ensure_api_key, grade_answer, model_name
-from mentor.pipeline import analyze
-from mentor import git
-from mentor.scope import _diff_scope, _whole_repo
+from ownie.context import code_for
+from ownie.llm import ensure_api_key, grade_answer, model_name
+from ownie.pipeline import analyze
+from ownie import git
+from ownie.scope import _diff_scope, _whole_repo
 from evals.benchmark import load_projects, project_repo
 from evals.judge import judge_model, match_decisions, score_questions
 
@@ -72,7 +72,7 @@ def main():
     "suite": args.suite,
     "model": model_name(),
     "judge_model": judge_model() or model_name(),
-    "mentor_commit": _mentor_commit(),
+    "mentor_commit": _mentor_commit(),  # key kept from before the rename, so old results still compare
   }
 
   jobs = [(project, run) for project in projects for run in range(1, args.runs + 1)]
@@ -142,12 +142,12 @@ def evaluate(project, run, test_grader):
 
 
 def _change_scope():
-  """The last commit only — what `mentor review` covers after one change."""
+  """The last commit only — what `ownie review` covers after one change."""
   return _diff_scope(git.git("rev-parse", "HEAD~1").strip(), "last commit")
 
 
 def run_grader(labels, predicted, matches, codes):
-  """Grade each label's sample answers against the mentor's own answer key."""
+  """Grade each label's sample answers against Ownie's own answer key."""
   decision_for_label = {}
   for d, m in zip(predicted, matches):
     if m.label_id and m.label_id not in decision_for_label:
@@ -278,7 +278,7 @@ def _mentor_commit():
   try:
     sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
                          cwd=ROOT, check=True).stdout.strip()
-    dirty = subprocess.run(["git", "status", "--porcelain", "--", "mentor"], capture_output=True, text=True,
+    dirty = subprocess.run(["git", "status", "--porcelain", "--", "ownie"], capture_output=True, text=True,
                            cwd=ROOT).stdout.strip()
     return sha + ("-dirty" if dirty else "")
   except subprocess.CalledProcessError:

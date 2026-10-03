@@ -1,4 +1,4 @@
-"""Ownie, mentor's pixel-robot mascot.
+"""Ownie, the pixel-robot mascot (the tool is named after it).
 
 Ownie is drawn on a small pixel grid and rendered with half-block
 characters: each terminal cell shows two stacked pixels (upper half in the
@@ -6,7 +6,7 @@ foreground colour of "▀", lower half in its background), which is what makes
 it look like pixel art rather than ASCII.
 
 Purely decorative: ui.py decides when Ownie appears, and `enabled()` turns
-it off for pipes, CI, `--plain`, or MENTOR_PLAIN=1.
+it off for pipes, CI, `--plain`, or OWNIE_PLAIN=1.
 """
 
 import os
@@ -86,7 +86,7 @@ THINKING = [("think", 0.45), ("think_off", 0.45), ("think", 0.45), ("blink", 0.1
 
 
 def enabled(console):
-  return console.is_terminal and not os.environ.get("MENTOR_PLAIN")
+  return console.is_terminal and not (os.environ.get("OWNIE_PLAIN") or os.environ.get("MENTOR_PLAIN"))
 
 
 def sprite(pose="idle"):
@@ -187,7 +187,7 @@ _LINES = {
     "Good session! Every decision you own is one less surprise later.",
   ],
   "encourage": [
-    "No worries — now you know where to dig. Try `mentor review --revisit` later.",
+    "No worries — now you know where to dig. Try `ownie review --revisit` later.",
     "That's what reviews are for. Read the explanations, then come back!",
   ],
 }

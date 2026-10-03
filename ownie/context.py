@@ -9,8 +9,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from mentor import git as g
-from mentor.scope import exclude_pathspecs
+from ownie import git as g
+from ownie.scope import exclude_pathspecs
 
 MAX_CONTEXT_CHARS = 150_000
 MAX_FILE_CHARS = 40_000

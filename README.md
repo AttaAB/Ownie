@@ -1,4 +1,6 @@
-# A CLI that quizzes you on the design decisions your AI made for you
+# Ownie: a Socratic code-comprehension evaluator for AI-generated code
+
+*A CLI that quizzes you on the design decisions your AI made for you.*
 
 ## Inspiration (...I couldn't explain my own code)
 
@@ -19,7 +21,7 @@ shipping... or did I just press Enter a lot?**
 
 ## What this project does
 
-`mentor review` reads the code in your repo (by default, whatever changed
+`ownie review` reads the code in your repo (by default, whatever changed
 since your last review) and:
 
 1. **Finds the design decisions** the AI made for you: storage choices,
@@ -32,7 +34,7 @@ since your last review) and:
 
 It never changes your code. It just checks that *you* get it.
 
-You're kept company by **Ownie**, a little pixel robot who waves hello,
+The tool is named after its mascot, **Ownie**, a little pixel robot who waves hello,
 thinks while the model works, and cheers when you own a decision. (It's
 very supportive. Even when you're wrong.)
 
@@ -80,7 +82,7 @@ thing this tool could do.
 
 ### 4) The record
 
-Everything goes into `.mentor/DECISIONS.md`, with a status per decision:
+Everything goes into `.ownie/DECISIONS.md`, with a status per decision:
 ✓ owned, ◐ partial, ○ to revisit, ↻ code changed.
 
 - If the code behind a decision you owned changes later, it gets marked
@@ -182,16 +184,16 @@ not tune the prompt to match my personal opinions with only one labeller
 ### 1) Install it
 
 ```bash
-pipx install git+https://github.com/AttaAB/engineer-mentor
+pipx install git+https://github.com/AttaAB/ownie
 ```
 
 No pipx? `brew install pipx` (macOS) or `python3 -m pip install --user pipx`.
-Plain pip works too: `pip install git+https://github.com/AttaAB/engineer-mentor`.
+Plain pip works too: `pip install git+https://github.com/AttaAB/ownie`.
 
 ### 2) Add your OpenAI key
 
 ```bash
-mkdir -p ~/.config/mentor && echo "OPENAI_API_KEY=sk-..." > ~/.config/mentor/.env
+mkdir -p ~/.config/ownie && echo "OPENAI_API_KEY=sk-..." > ~/.config/ownie/.env
 ```
 
 (Or set the `OPENAI_API_KEY` environment variable. It never reads the
@@ -199,14 +201,14 @@ mkdir -p ~/.config/mentor && echo "OPENAI_API_KEY=sk-..." > ~/.config/mentor/.en
 
 > **Privacy:** the code you review gets sent to the OpenAI API to find
 > decisions and grade answers. Don't run it on code you can't share. Put
-> paths you want skipped in a `.mentorignore` file (one per line, e.g.
+> paths you want skipped in a `.ownieignore` file (one per line, e.g.
 > `vendor/`).
 
 ### 3) Run it in any git repo
 
 ```bash
 cd my-vibe-coded-app
-mentor review
+ownie review
 ```
 
 During a review, type your answer in plain English and press Enter, or:
@@ -216,57 +218,57 @@ saved). You get 3 tries per question.
 ### All the commands
 
 ```bash
-mentor review                  # what's new since your last review
-mentor review --uncommitted    # only what's not committed yet
-mentor review --since 3        # the last 3 commits (or a date: "3 days ago", or a commit hash)
-mentor review --base develop   # on a branch, compare against develop
-mentor review --all            # the whole repo
-mentor review --more           # decisions it found but didn't ask yet
-mentor review --revisit        # retry the ones you didn't own
-mentor review -n 5             # 5 questions instead of 3
-mentor review -v               # show each step as it runs
-mentor review --plain          # no Ownie, no animation (or MENTOR_PLAIN=1)
-mentor status                  # your ownership score and what's waiting (no API calls)
+ownie review                  # what's new since your last review
+ownie review --uncommitted    # only what's not committed yet
+ownie review --since 3        # the last 3 commits (or a date: "3 days ago", or a commit hash)
+ownie review --base develop   # on a branch, compare against develop
+ownie review --all            # the whole repo
+ownie review --more           # decisions it found but didn't ask yet
+ownie review --revisit        # retry the ones you didn't own
+ownie review -n 5             # 5 questions instead of 3
+ownie review -v               # show each step as it runs
+ownie review --plain          # no Ownie, no animation (or OWNIE_PLAIN=1)
+ownie status                  # your ownership score and what's waiting (no API calls)
 ```
 
-On a feature branch, `mentor review` looks at changes since the branch
+On a feature branch, `ownie review` looks at changes since the branch
 split from `main`. On `main`, it looks at everything since your last
 review (the first run asks what to look at). Uncommitted changes are
 always included.
 
 ### 4) Use it inside Claude Code (optional)
 
-Install the `/mentor` command once:
+Install the `/ownie` command once:
 
 ```bash
 mkdir -p ~/.claude/commands
-curl -fsSL -o ~/.claude/commands/mentor.md \
-  https://raw.githubusercontent.com/AttaAB/engineer-mentor/main/integrations/claude-code/mentor.md
+curl -fsSL -o ~/.claude/commands/ownie.md \
+  https://raw.githubusercontent.com/AttaAB/ownie/main/integrations/claude-code/ownie.md
 ```
 
-Then, right after Claude writes some code, type `/mentor --uncommitted` in
+Then, right after Claude writes some code, type `/ownie --uncommitted` in
 the Claude Code chat. Claude asks you the questions and passes your answers
-to `mentor` for grading. It's told not to hint, answer or grade for you
-(no cheating). It uses the same `.mentor/` record as the terminal version.
+to `ownie` for grading. It's told not to hint, answer or grade for you
+(no cheating). It uses the same `.ownie/` record as the terminal version.
 
 Under the hood these are plain JSON commands, so any tool can drive a review:
 
 ```bash
-mentor ask [--uncommitted | --all | --more | --revisit ...] [-n N]
-mentor answer ID "your answer"      # or the answer on stdin
-mentor hint ID · mentor explain ID · mentor skip ID
+ownie ask [--uncommitted | --all | --more | --revisit ...] [-n N]
+ownie answer ID "your answer"      # or the answer on stdin
+ownie hint ID · ownie explain ID · ownie skip ID
 ```
 
 ## Project outputs
 
 You'll end up with:
 
-- `.mentor/DECISIONS.md`: every decision, the alternatives and trade-offs,
+- `.ownie/DECISIONS.md`: every decision, the alternatives and trade-offs,
   your explanation, and its status
-- `.mentor/state.json`: review state (last reviewed commit, statuses,
+- `.ownie/state.json`: review state (last reviewed commit, statuses,
   decisions not asked yet)
 
-Commit `.mentor/` if you want the record in your repo; ignore it if not.
+Commit `.ownie/` if you want the record in your repo; ignore it if not.
 
 Want to see a full session first? There's a real one in
 [docs/demo.md](docs/demo.md). The longer story of how it was built and
@@ -314,7 +316,7 @@ python -m evals.review_labels               # review change-suite labels (you're
 python -m evals.rate                        # hand-rate question quality
 ```
 
-Set `MENTOR_MODEL` to change the model, or `MENTOR_JUDGE_MODEL` to judge
+Set `OWNIE_MODEL` to change the model, or `OWNIE_JUDGE_MODEL` to judge
 with a different one.
 
 ## Feedback

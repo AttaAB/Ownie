@@ -1,9 +1,9 @@
 """The interactive question → answer → grade loop."""
 
-from mentor import ui
-from mentor.context import code_for
-from mentor.llm import grade_answer
-from mentor.record import record_result
+from ownie import ui
+from ownie.context import code_for
+from ownie.llm import grade_answer
+from ownie.record import record_result
 
 MAX_ATTEMPTS = 3
 

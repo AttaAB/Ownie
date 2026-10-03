@@ -4,7 +4,7 @@ Two suites:
   whole   — benchmark/<project>/labels.yaml; the whole repo is reviewed
   change  — benchmark/<project>/changes/<name>/{change.patch,labels.yaml};
             the project is committed, the patch applied as a second commit,
-            and only that commit is reviewed (like `mentor review` after a change)
+            and only that commit is reviewed (like `ownie review` after a change)
 
   python -m evals.benchmark --check     # every label's path:line exists
 """
@@ -21,7 +21,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel
 
-from mentor.models import Category
+from ownie.models import Category
 
 BENCHMARK_DIR = Path(__file__).resolve().parent.parent / "benchmark"
 
@@ -88,7 +88,7 @@ def project_repo(project):
   One commit ("snapshot"); change cases get a second commit ("change")
   with the patch applied, so HEAD~1..HEAD is exactly the change.
   """
-  with tempfile.TemporaryDirectory(prefix=f"mentor-eval-{project.project}-") as tmp:
+  with tempfile.TemporaryDirectory(prefix=f"ownie-eval-{project.project}-") as tmp:
     repo = Path(tmp) / project.project
     shutil.copytree(project.repo_dir, repo)
     _git(repo, "init", "-q", "-b", "main")
