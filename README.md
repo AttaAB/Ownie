@@ -52,10 +52,6 @@ writes the question:
 - **consequences**: what that choice means in practice
 - **evidence**: the exact `file:line` that proves it
 
-Why answer key first? Because a question without an answer key is just
-vibes. With one, the question stays grounded and your answer can actually
-be graded.
-
 Then a plain, non-AI check throws out any decision whose `file:line`
 evidence doesn't point at real code it was shown. (It has caught 0 so
 far, but it's cheap insurance against the model making things up.)
