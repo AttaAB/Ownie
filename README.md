@@ -1,4 +1,4 @@
-# Do I Actually Understand My Own Code? | A CLI that quizzes you on the design decisions your AI made for you
+# A CLI that quizzes you on the design decisions your AI made for you
 
 ## Inspiration (...I couldn't explain my own code)
 
