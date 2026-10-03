@@ -14,6 +14,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
+from mentor import mascot
 from mentor.verify import parse_refs
 
 console = Console(highlight=False)
@@ -57,7 +58,9 @@ def step(verbose, name, detail):
 
 
 def working(message):
-  """Spinner shown while waiting on the model."""
+  """Shown while waiting on the model: Ownie thinking, or a plain spinner."""
+  if mascot.enabled(console):
+    return mascot.thinking(console, message)
   return console.status(Text(message, style="dim"), spinner="dots")
 
 
@@ -81,7 +84,14 @@ def choice_menu(question, options):
 
 def found(count, asked, scope_label):
   console.print()
-  headline = Text.assemble(("Found ", ""), (str(count), "bold"), (f" design decision{'s' if count != 1 else ''} in ", ""), (scope_label, "italic"))
+  plural = "s" if count != 1 else ""
+  if mascot.enabled(console):
+    message = f"{mascot.line('start')}\nI found {count} design decision{plural} in {scope_label}."
+    if count > asked:
+      message += f" Here are the {asked} you'd most likely be asked to explain."
+    mascot.hello(console, message, width=min(_width() - 18, 64))
+    return
+  headline = Text.assemble(("Found ", ""), (str(count), "bold"), (f" design decision{plural} in ", ""), (scope_label, "italic"))
   console.print(headline)
   if count > asked:
     console.print(Text(f"Here are the {asked} you'd most likely be asked to explain.", style="dim"))
@@ -219,6 +229,15 @@ def end_card(tally, ownership_before, ownership_after, left, to_revisit, record_
   lines.append(Text.assemble(("Record  ", "bold"), (str(record_path), "dim")))
 
   console.print()
+  if mascot.enabled(console):
+    answered = tally["owned"] + tally["partial"] + tally["revisit"]
+    if answered and tally["owned"] == answered:
+      pose, kind = "cheer", "cheer"
+    elif tally["owned"] or after_pct > before_pct:
+      pose, kind = "happy", "happy"
+    else:
+      pose, kind = "idle", "encourage"
+    mascot.say(console, pose, mascot.line(kind), width=min(_width() - 18, 64))
   console.print(Panel(Group(*lines), title=" Session complete ", title_align="left", border_style="green", padding=(1, 2), width=_width()))
 
 

@@ -53,6 +53,10 @@ A session looks like this (abridged, from a real run on a small Flask API):
 At the end you get an ownership score for the repo and a record in
 `.mentor/DECISIONS.md`. The next `mentor review` only covers what's new.
 
+Along the way you're kept company by **Ownie**, a little pixel robot who
+waves hello, thinks while the model works, and cheers when you own a
+decision. Prefer it quiet? `mentor review --plain` or `MENTOR_PLAIN=1`.
+
 A full recorded session is in [docs/demo.md](docs/demo.md). How it was
 built and measured, and what the experiments taught, is in
 [docs/WRITEUP.md](docs/WRITEUP.md).
@@ -91,6 +95,7 @@ mentor review --more           # continue with decisions not asked yet
 mentor review --revisit        # retry decisions you haven't owned yet
 mentor review -n 5             # ask 5 questions instead of 3
 mentor review -v               # show each pipeline step
+mentor review --plain          # no Ownie, no animation
 mentor status                  # ownership score and what's waiting (no API calls)
 ```
 

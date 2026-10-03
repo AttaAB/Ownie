@@ -36,6 +36,7 @@ mentor review
 | `headless.py` | The same review as JSON commands (`ask`, `answer`, `hint`, `explain`, `skip`) for tools; `integrations/claude-code/mentor.md` is the `/mentor` command that drives them. |
 | `record.py` | Saves review state and regenerates `DECISIONS.md` from it. Keeps a snapshot of each answered decision's code, so an owned decision whose code later changes goes back to "↻ code changed" and is asked again. |
 | `ui.py` | Everything the user sees (rich panels, code snippets, end card). |
+| `mascot.py` | Ownie, the pixel-robot mascot: poses drawn on a pixel grid and rendered with half-block characters, plus the wave and thinking animations. Off for pipes, `--plain`, or `MENTOR_PLAIN=1`. |
 
 ## Measurement — `benchmark/` + `evals/`
 

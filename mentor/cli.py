@@ -47,6 +47,7 @@ What to review (pick at most one; default is "recent changes"):
 How to review:
   -n NUMBER            questions to ask (default {QUESTIONS_PER_RUN})
   -v, --verbose        show each step as it runs
+  --plain              no Ownie the robot, no animation (or set MENTOR_PLAIN=1)
   -h, --help           show this help
 
 During a review:
@@ -90,6 +91,7 @@ def main(argv=None):
   review.add_argument("--revisit", action="store_true", help="retry decisions not owned yet")
   review.add_argument("-n", type=int, default=QUESTIONS_PER_RUN, help=f"questions to ask (default {QUESTIONS_PER_RUN})")
   review.add_argument("-v", "--verbose", action="store_true", help="show each pipeline step")
+  review.add_argument("--plain", action="store_true", help="no Ownie, no animation")
 
   status = sub.add_parser("status", add_help=False, allow_abbrev=False)
   status.add_argument("-h", "--help", action="store_true")
@@ -118,6 +120,8 @@ def main(argv=None):
   except g.GitError:
     sys.exit("mentor: not inside a git repository.")
 
+  if getattr(args, "plain", False):
+    os.environ["MENTOR_PLAIN"] = "1"
   if args.command == "status":
     return show_status()
   if args.command in ("ask", "answer", "hint", "explain", "skip"):
