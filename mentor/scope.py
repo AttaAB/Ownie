@@ -77,6 +77,9 @@ def resolve_scope(args, state, ask):
   if args.uncommitted:
     return _diff_scope(g.head_commit() or EMPTY_TREE, "uncommitted changes")
 
+  if args.since and _is_commit_count(args.since):
+    return _last_commits(int(args.since))
+
   if args.since:
     base = _resolve_since(args.since)
     start = "start" if base == EMPTY_TREE else g.short(base)
@@ -120,6 +123,19 @@ def _first_run(ask):
   return _diff_scope(base, f"last {last_n} commits + uncommitted")
 
 
+def _is_commit_count(since):
+  # A short all-digit value is a count ("--since 3" = last 3 commits). Longer
+  # ones may be all-digit commit hashes, so those still go through _resolve_since.
+  return since.isdigit() and len(since) <= 4 and int(since) > 0
+
+
+def _last_commits(n):
+  total = int(g.git("rev-list", "--count", "HEAD").strip()) if g.head_commit() else 0
+  base = g.git("rev-parse", f"HEAD~{n}").strip() if n < total else EMPTY_TREE
+  shown = min(n, total)
+  return _diff_scope(base, f"last {shown} commit{'s' if shown != 1 else ''} + uncommitted")
+
+
 def _resolve_since(since):
   if g.ref_exists(since):
     return g.git("rev-parse", since).strip()
@@ -129,8 +145,8 @@ def _resolve_since(since):
   parsed = int(g.git("rev-parse", f"--since={since}").strip().split("=")[1])
   if parsed >= time.time() - 1:
     raise g.GitError(
-      f"couldn't understand --since {since!r}. "
-      "Use a commit hash (ddd39e8) or a date (\"3 days ago\", \"2026-09-01\")."
+      f"couldn't understand --since {since!r}. Use a number of commits (3), "
+      "a date (\"3 days ago\", \"2026-09-01\"), or a commit hash (ddd39e8)."
     )
 
   before = g.git("rev-list", "-1", f"--before={since}", "HEAD").strip()

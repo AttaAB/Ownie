@@ -169,6 +169,18 @@ def explanation(decision):
   console.print(Panel(Group(*body), title=" Explanation ", title_align="left", border_style="dim", padding=(0, 2), width=_width()))
 
 
+def other_options(pending, to_revisit):
+  """What else there is to do when a review finds nothing new."""
+  rows = []
+  if pending:
+    rows.append(("mentor review --more", f"{pending} decision{'s' if pending != 1 else ''} not asked yet"))
+  if to_revisit:
+    rows.append(("mentor review --revisit", f"{to_revisit} not owned yet"))
+  rows.append(("mentor review --all", "look at the whole project again"))
+  for command, why in rows:
+    console.print(Text.assemble("  ", (f"{command:<26}", "cyan"), (why, "dim")))
+
+
 def stopped():
   console.print()
   note("Stopping here. Progress saved.")

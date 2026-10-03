@@ -84,7 +84,7 @@ mentor hint ID · mentor explain ID · mentor skip ID
 ```bash
 mentor review                  # smart default (see below)
 mentor review --uncommitted    # only what's not committed yet
-mentor review --since <ref>    # from a commit, or a date like "3 days ago"
+mentor review --since 3        # the last 3 commits (or a date: "3 days ago", or a commit hash)
 mentor review --base develop   # on a branch, compare against develop
 mentor review --all            # the whole repo
 mentor review --more           # continue with decisions not asked yet

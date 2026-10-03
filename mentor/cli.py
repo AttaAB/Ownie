@@ -38,7 +38,7 @@ What to review (pick at most one; default is "recent changes"):
   (no option)          on a branch: changes since it split from main
                        on main: changes since your last review
   --uncommitted        only changes you haven't committed yet
-  --since WHEN         since a commit (ddd39e8) or a date ("3 days ago")
+  --since WHEN         last N commits (3), a date ("3 days ago"), or a commit (ddd39e8)
   --base BRANCH        on a branch, compare against BRANCH instead of main
   --all                the whole repo
   --more               continue with decisions left from the last review
@@ -56,6 +56,7 @@ During a review:
 Examples:
   mentor review                     review what's new
   mentor review --uncommitted       check what Claude just wrote
+  mentor review --since 3            the last 3 commits
   mentor review --since "2 days ago" -n 5
   mentor review --all -v
   mentor review --revisit           retry what you didn't own last time
@@ -144,7 +145,8 @@ def review_scope(args):
     return
 
   if scope.is_empty:
-    ui.info(f"Nothing to review ({scope.label}).")
+    ui.info(f"Nothing new to review ({scope.label}).")
+    ui.other_options(len(state["pending"]), len(revisit_decisions(state)))
     return
 
   ui.step(args.verbose, "scope", f"{scope.label} · {len(scope.files) + len(scope.untracked)} files · {scope.stats}")
@@ -168,6 +170,7 @@ def review_scope(args):
   if not decisions:
     save_state(state)
     ui.info("No new design decisions worth asking about in this change.")
+    ui.other_options(len(state["pending"]), len(revisit_decisions(state)))
     return
 
   asked = decisions[:args.n]
